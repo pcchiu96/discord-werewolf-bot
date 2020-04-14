@@ -1,8 +1,10 @@
 const Discord = require("discord.js");
-const { prefix, token } = require("./config.json");
+const { prefix, token } = require("../config.json");
 const allRoles = ["Werewolf", "Villager", "Seer", "Witch", "Hunter"];
 let roles = { werewolf: 0, villager: 0 };
 const client = new Discord.Client();
+
+console.log(token);
 
 let emoteJoin = "🎮";
 let emoteStart = "🟢";
@@ -39,9 +41,7 @@ client.on("message", (message) => {
     if (message.content === `${prefix}play`) {
         if (!gameOn) {
             message.channel
-                .send(
-                    "Welcome to the Werewolf Game! Press the controller to join. Then press the green circle to start."
-                )
+                .send("Welcome to the Werewolf Game! Press the controller to join. Then press the green circle to start.")
                 .then((message) => {
                     message.react(emoteJoin).then(() => message.react(emoteStart));
                     const filter = (reaction, user) => {
@@ -107,9 +107,7 @@ client.on("message", (message) => {
         if (gameOn) {
             if (players[0].role) {
                 //players.map((player) => message.channel.send(`${player.username}'s role is...${player.role}`));
-                console.log(
-                    players.map((player) => message.channel.send(`${player.username}'s role is...${player.role}`))
-                );
+                console.log(players.map((player) => message.channel.send(`${player.username}'s role is...${player.role}`)));
             } else {
                 message.channel.send("Players roles haven't been set yet. Start the game to assign roles");
             }
