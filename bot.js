@@ -1,14 +1,11 @@
 const Discord = require("discord.js");
 const { prefix, token } = require("../config.json");
-const allRoles = ["Werewolf", "Villager", "Seer", "Witch", "Hunter"];
-let roles = { werewolf: 0, villager: 0 };
 const client = new Discord.Client();
-
-console.log(token);
-
 let emoteJoin = "🎮";
 let emoteStart = "🟢";
 let emoteThumb = "👌";
+
+let emoteKeycaps = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
 
 client.once("ready", () => {
     console.log("Ready!");
@@ -22,60 +19,153 @@ client.once("disconnect", () => {
     console.log("Disconnect!");
 });
 
+const allRoles = ["Werewolf", "Villager", "!Seer", "!Witch", "!Hunter", "!Guard", "!Knight"];
+let roles = { Werewolf: 0, Villager: 0, Seer: 0, Witch: 0, Hunter: 0, Guard: 0, Knight: 0 };
 let gameOn = false;
 let players = [];
+let timer;
+let werewolvesVote = 0;
+let allVotes = 0;
+let killTime = 20000; //milliseconds
 
-//this assign the availables roles in the most balance manner
+function makeRolesArray(roles) {
+    let rolesArray = [];
+    let werewolves = Array(roles.Werewolf).fill("Werewolf");
+    let villagers = Array(roles.Villager).fill("Villager");
+
+    rolesArray = werewolves.concat(villagers);
+
+    if (roles.Seer) {
+        rolesArray.push("Seer");
+    }
+
+    return rolesArray;
+}
+
+//this shuffles the roles like a deck of cards for easier random distribution.
+function shuffleRoles(rolesArray) {
+    let pointer = 0;
+    let temp = "";
+    for (let i = 0; i < rolesArray.length; i++) {
+        pointer = Math.floor(Math.random() * rolesArray.length);
+        temp = rolesArray[i];
+        rolesArray[i] = rolesArray[pointer];
+        rolesArray[pointer] = temp;
+    }
+}
+
+//this assign the roles by shuffling the rolesArray
 function assignRoles(players) {
-    players.map((player) => {
-        player.role = "Villager";
+    let rolesArray = makeRolesArray(roles);
+    shuffleRoles(rolesArray);
+
+    for (let i = 0; i < players.length; i++) {
+        players[i].role = rolesArray[i];
+        console.log(`${players[i].username} got ${players[i].role}`);
+    }
+}
+
+function playerOptions() {
+    let playerOptions = "";
+    let number = 0;
+    players.forEach((player) => {
+        playerOptions += `(${emoteKeycaps[number]} ${player.username})`;
+        number += 1;
     });
+    return playerOptions;
+}
+
+function getTeammate(players, player) {
+    let teammateNames = "";
+    let teammateCount = 0;
+    players.forEach((teammate) => {
+        if (teammate.username !== player.username && teammate.role === player.role) {
+            teammateNames += `(${teammate.username})`;
+            teammateCount += 1;
+        }
+    });
+
+    if (teammateCount === 0) {
+        teammateNames = "you're the only Werewolf!";
+    } else if (teammateCount === 1) {
+        teammateNames += " is your teammate";
+    } else {
+        teammateNames += " are your teammates";
+    }
+    return teammateNames;
 }
 
 client.on("message", (message) => {
     if (message.channel.type == "dm") {
-        message.author.send("You are DMing me now!").catch((error) => console.log("Dm error, ignore for now."));
+        message.author.send("You're not supposed to message the bot!").catch((error) => console.log("Dm error, ignore for now."));
         return;
     }
 
     if (message.content === `${prefix}play`) {
+        let hostId = message.author.id;
         if (!gameOn) {
             message.channel
-                .send("Welcome to the Werewolf Game! Press the controller to join. Then press the green circle to start.")
+                .send(
+                    `Welcome to the Werewolf Game! Press the controller to join. Set the roles using "setRoles". Then the host can press the green circle to start.`
+                )
                 .then((message) => {
                     message.react(emoteJoin).then(() => message.react(emoteStart));
-                    const filter = (reaction, user) => {
-                        return reaction.emoji.name === emoteStart && !user.bot && user.id === message.author.id; //TODO: test only the host can start game
-                    };
 
                     message
-                        .awaitReactions(filter, { max: 1, time: 300000, errors: ["time"] })
+                        .awaitReactions((reaction, user) => reaction.emoji.name === emoteStart && !user.bot && user.id === hostId, {
+                            max: 1,
+                            time: 300000,
+                            errors: ["time"],
+                        })
                         .then((collected) => {
                             const reaction = collected.first();
 
-                            //change conditon to (reaction.emoji.name === emoteStart && players.length > 3)
                             if (reaction.emoji.name === emoteStart) {
+                                reaction.message.delete();
                                 message.channel.send(`Game start! Players: ${players}`);
+
                                 //assigning roles
                                 assignRoles(players);
-                                //send roles to each player
 
-                                message.channel.send(`Please check your pm for your role. Game starting in 15s`);
-                                players.map((player) =>
-                                    player.send(`Your role is...${player.role}`).then((dm) => {
-                                        dm.react(emoteThumb);
-                                    })
-                                );
-                            } else {
-                                message.channel.send(`Not enough players. Must be 4 or more. Game terminated`);
+                                //send roles to each player
+                                message.channel.send(`Please check your pm for your role. Game starting in ${killTime / 1000}s`);
+                                players.forEach((player) => {
+                                    if (player.role === "Werewolf") {
+                                        player.send(`Your role is...${player.role}! And ${getTeammate(players, player)}`);
+                                    } else {
+                                        player.send(`Your role is...${player.role}!`);
+                                    }
+                                });
+
+                                //First night
+                                timer = setTimeout(function () {
+                                    message.channel.send(`First night. Werewolves! Check your dm to select a player to kill`);
+                                    players.forEach((player) => {
+                                        if (player.role === "Werewolf") {
+                                            player
+                                                .send(
+                                                    `Select the player that you would like to kill. (Timer: ${
+                                                        killTime / 1000
+                                                    }s) + ${playerOptions()}`
+                                                )
+                                                .then((dm) => {
+                                                    for (let i = 0; i < players.length; i++) {
+                                                        dm.react(emoteKeycaps[i]);
+                                                    }
+                                                });
+                                        }
+                                    });
+                                }, killTime);
+
+                                //gather who got voted
                             }
                         })
                         .catch((collected) => {
-                            console.log("No action after 5mins");
+                            console.log("Time out. No action after 5mins");
                             console.log("game terminated");
                             gameOn = false;
                             players = [];
-                            message.channel.send("Game terminated.");
+                            message.channel.send("Time out. Game terminated.");
                         });
                 })
                 .catch((error) => {
@@ -99,40 +189,52 @@ client.on("message", (message) => {
         gameOn = false;
         players = [];
         message.channel.send("Game terminated.");
-    } else if (message.content === `${prefix}help`) {
-        message.channel.send(
-            "The roles are [Werewolf, Villager, Seer, Witch, Hunter], use the command -add <role> to add any of the unique role to the game. If not specified, the game will only have Villagers and Werewolves."
-        );
+        clearTimeout(timer);
+    } else if (message.content === `${prefix}showRoles`) {
+        console.log(roles);
+        if (gameOn) {
+            message.channel.send(makeRolesArray(roles));
+        } else {
+            console.log("No existing game. Start a game to use this function");
+        }
     } else if (message.content === `${prefix}playerRoles`) {
         if (gameOn) {
             if (players[0].role) {
                 //players.map((player) => message.channel.send(`${player.username}'s role is...${player.role}`));
-                console.log(players.map((player) => message.channel.send(`${player.username}'s role is...${player.role}`)));
+                console.log(players.forEach((player) => message.channel.send(`${player.username}'s role is...${player.role}`)));
             } else {
                 message.channel.send("Players roles haven't been set yet. Start the game to assign roles");
             }
         } else {
             console.log("No existing game. Start a game to use this function");
         }
+    } else if (message.content.startsWith(`${prefix}setRoles`)) {
+        let args = message.content.slice(`${prefix}setRoles`.length + 1).split(" ");
+        //console.log(args);
+
+        //use args to set each role
+        roles.Werewolf = parseInt(args[0]);
+        roles.Villager = parseInt(args[1]);
+        roles.Seer = parseInt(args[2]);
+        //do the same for the rest of the roles
+
+        message.channel.send(`Werewolves: ${roles.Werewolf}, Villagers: ${roles.Villager} have been set.`);
+        console.log(makeRolesArray(roles));
     }
 });
 
 client.on("messageReactionAdd", (reaction, user) => {
     if (reaction.emoji.name === emoteJoin && !user.bot) {
         console.log(`${user.username} was added. id: ${user.id}`);
-        let { id, username } = user;
-        let player = { id: id, username: username };
-        players.push(player);
+        players.push(user);
     } else if (reaction.emoji.name === emoteThumb && !user.bot) {
         console.log("Reaction get!");
-        setTimeout(function () {
-            console.log("I appear after 3s!");
-        }, 3000);
+        // setTimeout(function () {
+        //     console.log("I appear after 3s!");
+        // }, 3000);
+    } else if (emoteKeycaps.includes(reaction.emoji.name) && !user.bot) {
+        console.log(`${reaction.emoji.name} got selected`);
     }
-    // } else if (reaction.emoji.name === emoteStart && !user.bot) {
-    //     console.log("game start!");
-    //     reaction.message.delete();
-    // }
 });
 
 client.on("messageReactionRemove", (reaction, user) => {
