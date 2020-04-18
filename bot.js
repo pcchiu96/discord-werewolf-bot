@@ -1,4 +1,5 @@
 const Discord = require("discord.js");
+const { performance } = require("perf_hooks");
 const { prefix, token } = require("../config.json");
 const client = new Discord.Client();
 let emoteJoin = "🎮";
@@ -27,11 +28,11 @@ client.once("disconnect", () => {
 const allRoles = ["Werewolf", "Villager", "!Seer", "!Witch", "!Hunter", "!Guard", "!Knight"];
 //let roles = { Werewolf: 0, Villager: 0, Seer: 0, Witch: 0, Hunter: 0, Guard: 0, Knight: 0 };
 let roles = {
-    Werewolf: 1,
+    Werewolf: 0,
     Villager: 1,
-    Seer: 1,
+    Seer: 0,
     Robber: 0,
-    Troublemaker: 0,
+    Troublemaker: 1,
     Tanner: 0,
     Drunk: 0,
     Hunter: 0,
@@ -47,21 +48,40 @@ let players = [];
 let deck = [];
 let exist = {
     loneWolf: false,
+    Minion: false,
+    Mason: false,
     Seer: false,
     Robber: false,
     Troublemaker: false,
-    Tanner: false,
     Drunk: false,
-    Hunter: false,
-    Mason: false,
     Insomniac: false,
-    Minion: false,
     Deppelganger: false,
 };
 
+function resetExist() {
+    exist = {
+        loneWolf: false,
+        Minion: false,
+        Mason: false,
+        Seer: false,
+        Robber: false,
+        Troublemaker: false,
+        Drunk: false,
+        Insomniac: false,
+        Deppelganger: false,
+    };
+}
+
 let werewolfRoundTimer;
+let minionRoundTimer;
+let masonsRoundTimer;
 let seerRoundTimer;
+let robberRoundTimer;
+let troublemakerRoundTimer;
+let drunkRoundTimer;
+let insomniacRoundTimer;
 let voteTimer;
+
 let roundTimer;
 let playerTime = 10000; //milliseconds (20s)
 let discussionTime = 300000; //milliseconds (5mins)
@@ -71,9 +91,12 @@ function makeRolesArray(roles) {
     let rolesArray = [];
     let werewolves = Array(roles.Werewolf).fill("Werewolf");
     let villagers = Array(roles.Villager).fill("Villager");
-    let Seers = Array(roles.Seer).fill("Seer");
+    let seer = Array(roles.Seer).fill("Seer");
+    let robber = Array(roles.Robber).fill("Robber");
+    let troublemaker = Array(roles.Troublemaker).fill("Troublemaker");
+    //let drunk = Array(roles.Drunk).fill("Drunk");
 
-    rolesArray = werewolves.concat(villagers).concat(Seers);
+    rolesArray = werewolves.concat(villagers).concat(seer).concat(robber).concat(troublemaker);
 
     return rolesArray;
 }
@@ -139,7 +162,7 @@ function getTeammate(players, player) {
     return teammateNames;
 }
 
-function getEveryone(players) {
+function getEveryone() {
     let everyone = "";
     let count = 0;
     players.forEach((player) => {
@@ -213,6 +236,8 @@ function seerTurn(message) {
                 //show emotes in 🔢, 🔮 for the Seer to pick
                 dm.react(emotePlayerChoice).then(() => dm.react(emoteMiddleChoice));
 
+                console.log(`Player time ${playerTime}`);
+
                 //only listen for 🔢, 🔮 emojis
                 dm.awaitReactions(seerFilter, {
                     max: 1,
@@ -223,14 +248,16 @@ function seerTurn(message) {
                         const seerReaction = collected.first();
 
                         if (seerReaction.emoji.name === emotePlayerChoice) {
-                            dm.reply(`Select a player to see their card. ${getEveryone(players)}`).then((dm) => {
+                            let t1 = performance.now();
+                            let timeUsed = t1 - t0;
+                            let leftOverTime = playerTime - timeUsed;
+
+                            dm.reply(`Select a player to see their card. ${getEveryone()}. (Timer: ${(leftOverTime / 1000).toFixed(0)}s)`).then((dm) => {
                                 for (let i = 0; i < players.length; i++) {
                                     dm.react(emoteKeycaps[i]);
                                 }
 
-                                let t1 = performance.now();
-                                let timeUsed = (t1 - t0).toFixed(3);
-                                let leftOverTime = playerTime - timeUsed;
+                                console.log(`Player time remaining ${leftOverTime}`);
 
                                 dm.awaitReactions(keycapsFilter, {
                                     max: 1,
@@ -249,14 +276,16 @@ function seerTurn(message) {
                                     });
                             });
                         } else if (seerReaction.emoji.name === emoteMiddleChoice) {
-                            dm.reply(`Select two cards from the middle`).then((dm) => {
+                            let t1 = performance.now();
+                            let timeUsed = t1 - t0;
+                            let leftOverTime = playerTime - timeUsed;
+
+                            dm.reply(`Select two cards from the middle. (Timer: ${(leftOverTime / 1000).toFixed(0)}s)`).then((dm) => {
                                 for (let i = 0; i < 3; i++) {
                                     dm.react(emoteKeycaps[i]);
                                 }
 
-                                let t1 = performance.now();
-                                let timeUsed = (t1 - t0).toFixed(3);
-                                let leftOverTime = playerTime - timeUsed;
+                                console.log(`Player time remaining ${leftOverTime}`);
 
                                 dm.awaitReactions(keycapsFilter, {
                                     max: 1,
@@ -266,27 +295,32 @@ function seerTurn(message) {
                                     .then((collected) => {
                                         const seerMiddleChoice = collected.first().emoji.name;
 
+                                        let t2 = performance.now();
+                                        let timeUsed = t2 - t1;
+                                        let finalTime = leftOverTime - timeUsed;
+
                                         //depending on which number the seer picks, it shows one of the 3 last cards in the deck
                                         if (seerMiddleChoice === emoteKeycaps[0]) {
                                             console.log("Seer picked card 1");
-                                            dm.reply(`The card is ${deck[deck.length - 3]}`);
+                                            dm.reply(`The first card is ${deck[deck.length - 3]}. (Timer: ${(finalTime / 1000).toFixed(0)}s)`);
                                         } else if (seerMiddleChoice === emoteKeycaps[1]) {
                                             console.log("Seer picked card 2");
-                                            dm.reply(`The card is ${deck[deck.length - 2]}`);
+                                            dm.reply(`The second card is ${deck[deck.length - 2]}. (Timer: ${(finalTime / 1000).toFixed(0)}s)`);
                                         } else if (seerMiddleChoice === emoteKeycaps[2]) {
                                             console.log("Seer picked card 3");
-                                            dm.reply(`The card is ${deck[deck.length - 1]}`);
+                                            dm.reply(`The third card is ${deck[deck.length - 1]}. (Timer: ${(finalTime / 1000).toFixed(0)}s)`);
                                         }
                                     })
                                     .then(() => {
-                                        //TODO: make sure this performance choice has no logic error
                                         let t2 = performance.now();
-                                        let timeUsed = (t2 - t0).toFixed(3);
-                                        let leftOverTime = playerTime - timeUsed;
+                                        let timeUsed = t2 - t1;
+                                        let finalTime = leftOverTime - timeUsed;
+
+                                        console.log(`Player time final ${finalTime}`);
 
                                         dm.awaitReactions(seerFilter, {
                                             max: 1,
-                                            time: leftOverTime,
+                                            time: finalTime,
                                             errors: ["time"],
                                         })
                                             .then((collected) => {
@@ -324,6 +358,120 @@ function seerTurn(message) {
     });
 }
 
+function robberTurn(message) {
+    message.channel.send(`Robber! Please wake up`).then((message) => {
+        if (exist.Robber) {
+            let player = players.find((player) => player.role === "Robber");
+            player.send(`You may exchange your card another player's card ${getEveryone()}, and then view that card. (Timer: ${playerTime / 1000}s)`).then((dm) => {
+                for (let i = 0; i < players.length; i++) {
+                    dm.react(emoteKeycaps[i]);
+                }
+
+                dm.awaitReactions(keycapsFilter, {
+                    max: 1,
+                    time: playerTime,
+                    errors: ["time"],
+                })
+                    .then((collected) => {
+                        const robberPlayerChoice = collected.first();
+                        let index = emoteKeycaps.indexOf(robberPlayerChoice.emoji.name);
+                        let card = deck[index];
+
+                        console.log(`${player.username} (${player.role}) exchanged with ${players[index].username} (${players[index].role}) `);
+                        player.role = card;
+                        players[index].role = "Robber";
+                        console.log(`${player.username} is now (${player.role}) and ${players[index].username} is now (${players[index].role}) `);
+
+                        dm.reply(`You have exchanged your card with this player. You are now the ${card} and this player is now the Robber`);
+                    })
+                    .catch((collected) => {
+                        console.log("Time out. No action from the Robber. Game continues");
+                        dm.reply(`Time out, no exchange.`);
+                    });
+            });
+        }
+    });
+}
+
+function troublemakerTurn(message) {
+    message.channel.send(`Troublemaker! Please wake up`).then((message) => {
+        if (exist.Troublemaker) {
+            let t0 = performance.now();
+            let player = players.find((player) => player.role === "Troublemaker");
+            player.send(`You may swap cards between two players ${getEveryone()}. (Timer: ${playerTime / 1000}s)`).then((dm) => {
+                for (let i = 0; i < players.length; i++) {
+                    dm.react(emoteKeycaps[i]);
+                }
+
+                let p1, p2;
+
+                dm.awaitReactions(keycapsFilter, {
+                    max: 1,
+                    time: playerTime,
+                    errors: ["time"],
+                })
+                    .then((collected) => {
+                        const troublemakerChoice = collected.first().emoji.name;
+
+                        let t1 = performance.now();
+                        let timeUsed = t1 - t0;
+                        let leftOverTime = playerTime - timeUsed;
+
+                        p1 = troublemakerChoice;
+                        console.log(`Troublemaker selected ${troublemakerChoice}`);
+                        dm.reply(`Select another card. (Timer: ${(leftOverTime / 1000).toFixed(0)}s)`);
+                    })
+                    .then(() => {
+                        let t1 = performance.now();
+                        let timeUsed = t1 - t0;
+                        let leftOverTime = playerTime - timeUsed;
+
+                        dm.awaitReactions(keycapsFilter, {
+                            max: 1,
+                            time: leftOverTime,
+                            errors: ["time"],
+                        })
+                            .then((collected) => {
+                                const troublemakerChoice = collected.first().emoji.name;
+
+                                p2 = troublemakerChoice;
+                                console.log(`Troublemaker selected ${troublemakerChoice}`);
+
+                                let index1 = emoteKeycaps.indexOf(p1);
+                                let index2 = emoteKeycaps.indexOf(p2);
+                                let temp = players[index1].role;
+
+                                console.log(`${players[index1].username} (${players[index1].role}) has been swapped with ${players[index2].username} (${players[index2].role}) `);
+                                players[index1].role = players[index2].role;
+                                players[index2].role = temp;
+                                console.log(`${players[index1].username} is now (${players[index1].role}) and ${players[index2].username} is now (${players[index2].role}) `);
+
+                                dm.reply(`Player ${p1} and ${p2} have been swapped`);
+                                console.log(`Troublemaker selected ${troublemakerChoice}`);
+                            })
+                            .catch((collected) => {
+                                console.log("Time out. No second action from the Troublemaker. Game continues");
+                                dm.reply(`Time out. No swap.`);
+                            });
+                    })
+                    .catch((collected) => {
+                        console.log("Time out. No action from the Troublemaker. Game continues");
+                        dm.reply(`Time out. No swap.`);
+                    });
+            });
+        }
+    });
+}
+
+function voteTurn(message) {
+    message.channel.send(`Vote who you think is the werewolf! ${getEveryone()}`).then((message) => {
+        for (let i = 0; i < players.length; i++) {
+            message.react(emoteKeycaps[i]);
+        }
+        //gather the votes using awaitReaction for 5mins
+    });
+}
+
 function oneNightUltimateWerewolf(message) {
     message.channel
         .send(`Welcome to the Werewolf Game! Press the controller to join. Then the host can press the green circle to start.`)
@@ -354,19 +502,29 @@ function oneNightUltimateWerewolf(message) {
                         });
 
                         //night falls
-                        werewolfRoundTimer = setTimeout(function () {
-                            nightFalls(message);
-                        }, playerTime);
+                        // werewolfRoundTimer = setTimeout(function () {
+                        //     nightFalls(message);
+                        // }, playerTime);
 
                         //ask Seer for 2 cards in the middle or a player
-                        seerRoundTimer = setTimeout(function () {
-                            seerTurn(message);
-                        }, playerTime * 2);
+                        // seerRoundTimer = setTimeout(function () {
+                        //     seerTurn(message);
+                        // }, playerTime * 2);
+
+                        //robber switch one card with a player and see the role
+                        // robberRoundTimer = setTimeout(function () {
+                        //     robberTurn(message);
+                        // }, playerTime);
+
+                        //troublemaker switches two cards without looking at them
+                        troublemakerRoundTimer = setTimeout(function () {
+                            troublemakerTurn(message);
+                        }, playerTime);
 
                         //lastly ask everyone to vote
                         voteTimer = setTimeout(function () {
                             voteTurn(message);
-                        }, playerTime * 3);
+                        }, playerTime * 2);
                     }
                 })
                 .catch((collected) => {
@@ -380,15 +538,6 @@ function oneNightUltimateWerewolf(message) {
             console.log(error);
             gameOn = false;
         });
-}
-
-function voteTurn(message) {
-    message.channel.send(`Vote! ${getEveryone(players)}`).then((message) => {
-        for (let i = 0; i < players.length; i++) {
-            message.react(emoteKeycaps[i]);
-        }
-        //gather the votes using awaitReaction for 5mins
-    });
 }
 
 client.on("message", (message) => {
@@ -411,9 +560,9 @@ client.on("message", (message) => {
             message.channel.send("A game already exists. Type -stop to terminate current session.");
         }
     } else if (message.content === `${prefix}players`) {
-        console.log(players.map((player) => player.username));
+        console.log(players.forEach((player) => player.username));
         if (players.length) {
-            message.channel.send(players.map((player) => player.username));
+            message.channel.send(players.forEach((player) => player.username));
         } else {
             message.channel.send("No players.");
         }
@@ -422,6 +571,7 @@ client.on("message", (message) => {
         console.log("game terminated");
         gameOn = false;
         players = [];
+        resetExist();
         message.channel.send("Game terminated.");
         clearTimeout(werewolfRoundTimer);
         clearTimeout(seerRoundTimer);
