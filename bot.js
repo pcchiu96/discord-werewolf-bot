@@ -20,14 +20,45 @@ client.once("disconnect", () => {
 });
 
 const allRoles = ["Werewolf", "Villager", "!Seer", "!Witch", "!Hunter", "!Guard", "!Knight"];
-let roles = { Werewolf: 0, Villager: 0, Seer: 0, Witch: 0, Hunter: 0, Guard: 0, Knight: 0 };
+//let roles = { Werewolf: 0, Villager: 0, Seer: 0, Witch: 0, Hunter: 0, Guard: 0, Knight: 0 };
+let roles = {
+    Werewolf: 5,
+    Villager: 0,
+    Seer: 0,
+    Robber: 0,
+    Troublemaker: 0,
+    Tanner: 0,
+    Drunk: 0,
+    Hunter: 0,
+    Mason: 0,
+    Insomniac: 0,
+    Minion: 0,
+    Deppelganger: 0,
+};
 let gameOn = false;
-let players = [];
-let timer;
-let werewolvesVote = 0;
-let allVotes = 0;
-let killTime = 20000; //milliseconds
 
+let players = [];
+let deck = [];
+let exist = {
+    loneWolf: false,
+    Seer: false,
+    Robber: false,
+    Troublemaker: false,
+    Tanner: false,
+    Drunk: false,
+    Hunter: false,
+    Mason: false,
+    Insomniac: false,
+    Minion: false,
+    Deppelganger: false,
+};
+
+let startGameTimer;
+let roundTimer;
+let playerTime = 20000; //milliseconds (20s)
+let discussionTime = 300000; //milliseconds (5mins)
+
+//turns the roles object into an array
 function makeRolesArray(roles) {
     let rolesArray = [];
     let werewolves = Array(roles.Werewolf).fill("Werewolf");
@@ -43,7 +74,7 @@ function makeRolesArray(roles) {
 }
 
 //this shuffles the roles like a deck of cards for easier random distribution.
-function shuffleRoles(rolesArray) {
+function shuffleDeck(rolesArray) {
     let pointer = 0;
     let temp = "";
     for (let i = 0; i < rolesArray.length; i++) {
@@ -56,12 +87,22 @@ function shuffleRoles(rolesArray) {
 
 //this assign the roles by shuffling the rolesArray
 function assignRoles(players) {
-    let rolesArray = makeRolesArray(roles);
-    shuffleRoles(rolesArray);
+    let wolfCount = 0;
+    deck = makeRolesArray(roles);
+    shuffleDeck(deck);
 
     for (let i = 0; i < players.length; i++) {
-        players[i].role = rolesArray[i];
+        players[i].role = deck[i];
+        if (deck[i] === "Werewolf") {
+            wolfCount += 1;
+        } else {
+            exist[deck[i]] = true;
+        }
         console.log(`${players[i].username} got ${players[i].role}`);
+    }
+
+    if (wolfCount == 1) {
+        exist.loneWolf = true;
     }
 }
 
@@ -86,7 +127,7 @@ function getTeammate(players, player) {
     });
 
     if (teammateCount === 0) {
-        teammateNames = "you're the only Werewolf!";
+        teammateNames = "you're a lone werewolf!";
     } else if (teammateCount === 1) {
         teammateNames += " is your teammate";
     } else {
@@ -95,10 +136,39 @@ function getTeammate(players, player) {
     return teammateNames;
 }
 
+function getEveryone(players) {
+    let everyone = "";
+    let count = 0;
+    players.forEach((player) => {
+        everyone += `(${emoteKeycaps[count]} ${player.username})`;
+        count += 1;
+    });
+
+    return everyone;
+}
+
 client.on("message", (message) => {
     if (message.channel.type == "dm") {
         message.author.send("You're not supposed to message the bot!").catch((error) => console.log("Dm error, ignore for now."));
         return;
+    }
+
+    if (message.content === "test") {
+        message.channel
+            .send("message1")
+            .then((msg) => {
+                msg.react(emoteThumb);
+                werewolfTimer = setTimeout(function () {
+                    console.log("Werewolf times up!");
+                    return;
+                }, playerTime);
+                console.log("message1");
+            })
+            .then(() => {
+                message.channel.send("message2").then(() => {
+                    console.log("message2");
+                });
+            });
     }
 
     if (message.content === `${prefix}play`) {
@@ -128,36 +198,107 @@ client.on("message", (message) => {
                                 assignRoles(players);
 
                                 //send roles to each player
-                                message.channel.send(`Please check your pm for your role. Game starting in ${killTime / 1000}s`);
+                                message.channel.send(`Please check your pm for your role. Game starting in ${playerTime / 1000}s`);
                                 players.forEach((player) => {
                                     if (player.role === "Werewolf") {
                                         player.send(`Your role is...${player.role}! And ${getTeammate(players, player)}`);
                                     } else {
-                                        player.send(`Your role is...${player.role}!`);
+                                        player.send(`Your role is...${player.role}`);
                                     }
                                 });
 
-                                //First night
-                                timer = setTimeout(function () {
-                                    message.channel.send(`First night. Werewolves! Check your dm to select a player to kill`);
-                                    players.forEach((player) => {
-                                        if (player.role === "Werewolf") {
-                                            player
-                                                .send(
-                                                    `Select the player that you would like to kill. (Timer: ${
-                                                        killTime / 1000
-                                                    }s) + ${playerOptions()}`
-                                                )
-                                                .then((dm) => {
-                                                    for (let i = 0; i < players.length; i++) {
-                                                        dm.react(emoteKeycaps[i]);
+                                //Night Falls
+                                startGameTimer = setTimeout(function () {
+                                    message.channel
+                                        .send(`Night falls. Werewolves! Please wake up.`)
+                                        .then((message) => {
+                                            //if there's a lone wolf in the players, ask him to pick a card in the middle
+
+                                            if (exist.loneWolf) {
+                                                players.forEach((player) => {
+                                                    if (player.role === "Werewolf") {
+                                                        player
+                                                            .send(
+                                                                `Which of the 3 cards would you like to take a peek? (Timer: ${
+                                                                    playerTime / 1000
+                                                                }s)`
+                                                            )
+                                                            .then((dm) => {
+                                                                for (let i = 0; i < 3; i++) {
+                                                                    dm.react(emoteKeycaps[i]);
+                                                                }
+
+                                                                dm.awaitReactions(
+                                                                    (reaction, user) =>
+                                                                        emoteKeycaps.includes(reaction.emoji.name) && !user.bot && user.id,
+                                                                    {
+                                                                        max: 1,
+                                                                        time: playerTime,
+                                                                        errors: ["time"],
+                                                                    }
+                                                                )
+                                                                    .then((collected) => {
+                                                                        const wolfReaction = collected.first();
+
+                                                                        if (wolfReaction.emoji.name === emoteKeycaps[0]) {
+                                                                            console.log("Wolf picked card 1");
+                                                                            dm.reply(`The card is ${deck[deck.length - 3]}`);
+                                                                        } else if (wolfReaction.emoji.name === emoteKeycaps[1]) {
+                                                                            console.log("Wolf picked card 2");
+                                                                            dm.reply(`The card is ${deck[deck.length - 3]}`);
+                                                                        } else if (wolfReaction.emoji.name === emoteKeycaps[2]) {
+                                                                            console.log("Wolf picked card 3");
+                                                                            dm.reply(`The card is ${deck[deck.length - 3]}`);
+                                                                        }
+                                                                    })
+                                                                    .catch((collected) => {
+                                                                        console.log(
+                                                                            "Time out. No action from the werewolf. Game continues"
+                                                                        );
+                                                                        dm.reply(`Time out, no action.`);
+                                                                    });
+                                                            });
                                                     }
                                                 });
-                                        }
-                                    });
-                                }, killTime);
+                                            }
+                                        })
+                                        .then(() => {
+                                            roundTimer = setTimeout(function () {
+                                                message.channel
+                                                    .send(
+                                                        `Seer! Please wake up. You may look at another player's card or two of the center cards.`
+                                                    )
+                                                    .then((message) => {
+                                                        if (exist.Seer) {
+                                                            players.forEach((player) => {
+                                                                if (player.role === "Seer") {
+                                                                    console.log(`${player.username} Hi I'm Seer`);
+                                                                }
+                                                            });
+                                                        } else {
+                                                            setTimeout(function () {
+                                                                console.log("Werewolf doing nothing");
+                                                            }, playerTime);
+                                                        }
+                                                    });
+                                            }, playerTime);
+                                        })
+                                        .then(() => {
+                                            roundTimer = setTimeout(function () {
+                                                message.channel.send(`Vote! ${getEveryone(players)}`).then((message) => {
+                                                    for (let i = 0; i < players.length; i++) {
+                                                        message.react(emoteKeycaps[i]);
+                                                    }
 
-                                //gather who got voted
+                                                    //gather the votes using awaitReaction for 5mins
+                                                });
+                                            }, playerTime);
+                                        })
+                                        .catch((error) => {
+                                            console.log("What happened?");
+                                            console.log(error);
+                                        });
+                                }, playerTime);
                             }
                         })
                         .catch((collected) => {
@@ -165,7 +306,6 @@ client.on("message", (message) => {
                             console.log("game terminated");
                             gameOn = false;
                             players = [];
-                            message.channel.send("Time out. Game terminated.");
                         });
                 })
                 .catch((error) => {
@@ -189,7 +329,8 @@ client.on("message", (message) => {
         gameOn = false;
         players = [];
         message.channel.send("Game terminated.");
-        clearTimeout(timer);
+        clearTimeout(startGameTimer);
+        clearTimeout(roundTimer);
     } else if (message.content === `${prefix}showRoles`) {
         console.log(roles);
         if (gameOn) {
@@ -233,7 +374,7 @@ client.on("messageReactionAdd", (reaction, user) => {
         //     console.log("I appear after 3s!");
         // }, 3000);
     } else if (emoteKeycaps.includes(reaction.emoji.name) && !user.bot) {
-        console.log(`${reaction.emoji.name} got selected`);
+        //console.log(`${reaction.emoji.name} got selected`);
     }
 });
 
