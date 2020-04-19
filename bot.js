@@ -28,17 +28,16 @@ client.once("disconnect", () => {
 const allRoles = ["Werewolf", "Villager", "!Seer", "!Witch", "!Hunter", "!Guard", "!Knight"];
 //let roles = { Werewolf: 0, Villager: 0, Seer: 0, Witch: 0, Hunter: 0, Guard: 0, Knight: 0 };
 let roles = {
-    Werewolf: 0,
+    Werewolf: 1,
+    Minion: 1,
     Villager: 1,
     Seer: 0,
     Robber: 0,
-    Troublemaker: 1,
-    Tanner: 0,
+    Troublemaker: 0,
     Drunk: 0,
     Hunter: 0,
     Mason: 0,
     Insomniac: 0,
-    Minion: 0,
     Deppelganger: 0,
 };
 let gameOn = false;
@@ -82,7 +81,6 @@ let drunkRoundTimer;
 let insomniacRoundTimer;
 let voteTimer;
 
-let roundTimer;
 let playerTime = 10000; //milliseconds (20s)
 let discussionTime = 300000; //milliseconds (5mins)
 
@@ -90,13 +88,14 @@ let discussionTime = 300000; //milliseconds (5mins)
 function makeRolesArray(roles) {
     let rolesArray = [];
     let werewolves = Array(roles.Werewolf).fill("Werewolf");
+    let minion = Array(roles.Minion).fill("Minion");
     let villagers = Array(roles.Villager).fill("Villager");
     let seer = Array(roles.Seer).fill("Seer");
     let robber = Array(roles.Robber).fill("Robber");
     let troublemaker = Array(roles.Troublemaker).fill("Troublemaker");
     //let drunk = Array(roles.Drunk).fill("Drunk");
 
-    rolesArray = werewolves.concat(villagers).concat(seer).concat(robber).concat(troublemaker);
+    rolesArray = werewolves.concat(minion).concat(villagers).concat(seer).concat(robber).concat(troublemaker);
 
     return rolesArray;
 }
@@ -144,7 +143,7 @@ function playerOptions() {
     return playerOptions;
 }
 
-function getTeammate(players, player) {
+function getTeammate(player) {
     let teammateNames = "";
     let teammateCount = 0;
     players.forEach((teammate) => {
@@ -160,6 +159,24 @@ function getTeammate(players, player) {
         teammateNames += " are your teammates";
     }
     return teammateNames;
+}
+
+function getWerewolves() {
+    let werewolves = "";
+    let count = 0;
+    players.forEach((player) => {
+        if (player.role === "Werewolf") {
+            werewolves += `(${player.username})`;
+            count += 1;
+        }
+    });
+
+    if (count === 1) {
+        werewolves += " is the Werewolf";
+    } else {
+        werewolves += " are the Werewolves";
+    }
+    return werewolves;
 }
 
 function getEveryone() {
@@ -215,7 +232,7 @@ function nightFalls(message) {
                 //otherwise, tell all the werewolves each other's teammates
                 players.forEach((player) => {
                     if (player.role === "Werewolf") {
-                        player.send(`${getTeammate(players, player)}`);
+                        player.send(`${getTeammate(player)}`);
                     }
                 });
             }
@@ -224,6 +241,15 @@ function nightFalls(message) {
             console.log("Night fall: Sending message failed");
             console.log(error);
         });
+}
+
+function minionTurn(message) {
+    message.channel.send(`Minion! Please wake up`).then((message) => {
+        if (exist.Minion) {
+            let player = players.find((player) => player.role === "Minion");
+            player.send(`${getWerewolves()}.`);
+        }
+    });
 }
 
 function seerTurn(message) {
@@ -464,11 +490,39 @@ function troublemakerTurn(message) {
 }
 
 function voteTurn(message) {
-    message.channel.send(`Vote who you think is the werewolf! ${getEveryone()}`).then((message) => {
+    message.channel.send(`Vote who you think is the werewolf! ${getEveryone()}`).then((vote) => {
         for (let i = 0; i < players.length; i++) {
-            message.react(emoteKeycaps[i]);
+            vote.react(emoteKeycaps[i]);
         }
-        //gather the votes using awaitReaction for 5mins
+
+        let votes = {
+            "1️⃣": 0,
+            "2️⃣": 0,
+            "3️⃣": 0,
+            "4️⃣": 0,
+            "5️⃣": 0,
+            "6️⃣": 0,
+            "7️⃣": 0,
+            "8️⃣": 0,
+            "9️⃣": 0,
+            "🔟": 0,
+        };
+
+        //TODO: need a better way to determine max vote
+        vote.awaitReactions((reaction, user) => emoteKeycaps.includes(reaction.emoji.name) && !user.bot, {
+            max: players.length,
+            time: discussionTime,
+            errors: ["time"],
+        })
+            .then((collected) => {
+                const reaction = collected.first().emoji.name;
+                votes[reaction] += 1;
+                console.log(reaction);
+            })
+            .catch((collected) => {
+                //gather the votes and reveal
+                console.log(`After 5mins`);
+            });
     });
 }
 
@@ -502,9 +556,14 @@ function oneNightUltimateWerewolf(message) {
                         });
 
                         //night falls
-                        // werewolfRoundTimer = setTimeout(function () {
-                        //     nightFalls(message);
-                        // }, playerTime);
+                        werewolfRoundTimer = setTimeout(function () {
+                            nightFalls(message);
+                        }, playerTime);
+
+                        //minion wakes up to see who the werewolves are
+                        minionRoundTimer = setTimeout(function () {
+                            minionTurn(message);
+                        }, playerTime * 2);
 
                         //ask Seer for 2 cards in the middle or a player
                         // seerRoundTimer = setTimeout(function () {
@@ -517,9 +576,14 @@ function oneNightUltimateWerewolf(message) {
                         // }, playerTime);
 
                         //troublemaker switches two cards without looking at them
-                        troublemakerRoundTimer = setTimeout(function () {
-                            troublemakerTurn(message);
-                        }, playerTime);
+                        // troublemakerRoundTimer = setTimeout(function () {
+                        //     troublemakerTurn(message);
+                        // }, playerTime);
+
+                        //drunk switch one card in the middle without looking at them
+                        // drunkRoundTimer = setTimeout(function () {
+                        //     drunkTurn(message);
+                        // }, playerTime);
 
                         //lastly ask everyone to vote
                         voteTimer = setTimeout(function () {
@@ -575,7 +639,13 @@ client.on("message", (message) => {
         message.channel.send("Game terminated.");
         clearTimeout(werewolfRoundTimer);
         clearTimeout(seerRoundTimer);
-
+        clearTimeout(minionRoundTimer);
+        clearTimeout(masonsRoundTimer);
+        clearTimeout(seerRoundTimer);
+        clearTimeout(robberRoundTimer);
+        clearTimeout(troublemakerRoundTimer);
+        clearTimeout(drunkRoundTimer);
+        clearTimeout(insomniacRoundTimer);
         clearTimeout(voteTimer);
     } else if (message.content === `${prefix}showRoles`) {
         console.log(roles);
