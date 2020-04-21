@@ -158,6 +158,24 @@ function assignRoles(players) {
     }
 }
 
+function refreshExist() {
+    resetExist();
+    let wolfCount = 0;
+
+    for (let i = 0; i < players.length; i++) {
+        if (deck[i] === "Werewolf") {
+            wolfCount += 1;
+            exist.Werewolf = true;
+        } else {
+            exist[deck[i]] = true;
+        }
+    }
+
+    if (wolfCount == 1) {
+        exist.loneWolf = true;
+    }
+}
+
 function getTeammate(player) {
     let teammateNames = "";
     let teammateCount = 0;
@@ -640,7 +658,8 @@ function drunkTurn(message) {
 }
 
 function voteTurn(message) {
-    //TODO: re-assign exist variable
+    //refresh which roles exist in each player's hand
+    refreshExist();
 
     message.channel.send(`Vote who you think is the werewolf! Press ${emoteOK} to confirm${getEveryone()}(Discusstion time:  ${discussionTime / 1000}} / 1000}s)`).then((vote) => {
         voteOn = true;
@@ -662,11 +681,16 @@ function voteTurn(message) {
                     let highestVote = Math.max(...votes);
                     let votedOut = players[votes.indexOf(highestVote)];
 
-                    //TODO: sort this logic out
-                    if (votedOut.role !== "Werewolf") {
-                        message.channel.send(`${votedOut.username} is not a Werewolf!${getBadGuys()}win!`);
-                    } else {
+                    //special case when all bad guys are in the middle
+                    if (highestVote === 1 && !exist.Werewolf && !exist.Minion) {
+                        message.channel.send(`There are no Werewolves! ${getGoodGuys()}win!`);
+                    } else if (votedOut.role === "Werewolf") {
                         message.channel.send(`${votedOut.username} is a Werewolf!${getGoodGuys()}win!`);
+                        //special condition for minion and no werewolves
+                    } else if (votedOut.role === "Minion" && !exist.Werewolf) {
+                        message.channel.send(`${votedOut.username} is not a Werewolf! There are no Werewolves!${getGoodGuys()}win!`);
+                    } else {
+                        message.channel.send(`${votedOut.username} is not a Werewolf!${getBadGuys()}win!`);
                     }
                 }
             })
@@ -675,8 +699,14 @@ function voteTurn(message) {
                 let highestVote = Math.max(...votes);
                 let votedOut = players[votes.indexOf(highestVote)];
 
-                if (votedOut.role !== "Werewolf") {
+                //special case when all bad guys are in the middle
+                if (highestVote === 1 && !exist.Werewolf && !exist.Minion) {
+                    message.channel.send(`There are no Werewolves! ${getGoodGuys()}win!`);
+                } else if (votedOut.role === "Werewolf") {
                     message.channel.send(`${votedOut.username} is a Werewolf!${getGoodGuys()}win!`);
+                    //special condition for minion and no werewolves
+                } else if (votedOut.role === "Minion" && !exist.Werewolf) {
+                    message.channel.send(`${votedOut.username} is not a Werewolf! There are no Werewolves!${getGoodGuys()}win!`);
                 } else {
                     message.channel.send(`${votedOut.username} is not a Werewolf!${getBadGuys()}win!`);
                 }
