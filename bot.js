@@ -32,7 +32,7 @@ let roles = {
     Werewolf: 1,
     Minion: 0,
     Villager: 1,
-    Seer: 0,
+    Seer: 1,
     Robber: 0,
     Troublemaker: 0,
     Drunk: 1,
@@ -61,11 +61,11 @@ let description = {
 let gameOn = false;
 let voteOn = false;
 
+let joinWaitTime = 30000;
 let playerTime = 10000; //time for each player's choice
 let roundTime = playerTime; //each rounds time, this increments based on which roles are the in game
 let discussionTime = 120000; //milliseconds (5mins)
 
-let hostId;
 let players = [];
 let deck = [];
 let exist = {
@@ -251,7 +251,7 @@ function halfTimeReminder(player, time) {
     player.send(`(${time / 1000}s remaining).`);
 }
 
-function nightFalls(message) {
+function werewolfTurn(message) {
     message.channel
         .send(`Night falls. Werewolves! Please wake up.`)
         .then((message) => {
@@ -682,7 +682,7 @@ function voteTurn(message) {
                     let votedOut = players[votes.indexOf(highestVote)];
 
                     //special case when all bad guys are in the middle
-                    if (highestVote === 1 && !exist.Werewolf && !exist.Minion) {
+                    if (highestVote === 0 && !exist.Werewolf && !exist.Minion) {
                         message.channel.send(`There are no Werewolves! ${getGoodGuys()}win!`);
                     } else if (votedOut.role === "Werewolf") {
                         message.channel.send(`${votedOut.username} is a Werewolf!${getGoodGuys()}win!`);
@@ -714,136 +714,134 @@ function voteTurn(message) {
     });
 }
 
-function oneNightUltimateWerewolf(message) {
-    message.channel
-        .send(`Welcome to the Werewolf Game!\nPress the controller to join. Then the host can press the green circle to start.`)
-        .then((welcomeMessage) => {
-            welcomeMessage.react(emoteJoin).then(() => welcomeMessage.react(emoteStart));
+async function oneNightUltimateWerewolf(message, hostId) {
+    let welcomeMessage = await message.channel.send(`Welcome to the Werewolf Game!\nPress the controller to join. Then the host can press the green circle to start.`);
+    try {
+        await welcomeMessage.react(emoteJoin);
+        await welcomeMessage.react(emoteStart);
 
-            welcomeMessage
-                //only the host can start the game
-                .awaitReactions((reaction, user) => reaction.emoji.name === emoteStart && !user.bot && user.id === hostId, {
-                    max: 1,
-                    time: 300000, //5 mins of wait time
-                    errors: ["time"],
-                })
-                .then((collected) => {
-                    const reaction = collected.first();
+        welcomeMessage
+            //only the host can start the game
+            .awaitReactions((reaction, user) => reaction.emoji.name === emoteStart && !user.bot && user.id === hostId, {
+                max: 1,
+                time: joinWaitTime, //5 mins of wait time
+                errors: ["time"],
+            })
+            .then((collected) => {
+                welcomeMessage.delete();
+                message.channel.send(`Game start! Players: ${players}`); //ping all players the game has started
 
-                    if (reaction.emoji.name === emoteStart) {
-                        welcomeMessage.delete();
-                        message.channel.send(`Game start! Players: ${players}`); //ping all players the game has started
+                //assigning roles
+                assignRoles(players);
 
-                        //assigning roles
-                        assignRoles(players);
-
-                        //send roles to each player
-                        message.channel.send(`Please check your pm for your role. Game starting in ${playerTime / 1000}s`);
-                        players.forEach((player) => {
-                            player.send(`Your role is...${player.role}! ${getRoleDescription(player.role)}`); //TODO: provide role description
-                        });
-
-                        //night falls
-                        if (roles.Werewolf) {
-                            werewolfRoundTimer = setTimeout(function () {
-                                nightFalls(message);
-                            }, roundTime);
-                            roundTime += playerTime;
-                            console.log(`Werewolf time: ${roundTime / 1000}s`);
-                        }
-
-                        //minion wakes up to see who the werewolves are
-                        if (roles.Minion) {
-                            minionRoundTimer = setTimeout(function () {
-                                minionTurn(message);
-                            }, roundTime);
-                            roundTime += playerTime;
-                            console.log(`Minion time: ${roundTime / 1000}s`);
-                        }
-
-                        //ask Seer for 2 cards in the middle or a player
-                        if (roles.Seer) {
-                            seerRoundTimer = setTimeout(function () {
-                                seerTurn(message);
-                            }, roundTime);
-                            roundTime += playerTime;
-                            console.log(`Seer time: ${roundTime / 1000}s`);
-                        }
-
-                        //robber switch one card with a player and see the role
-                        if (roles.Robber) {
-                            robberRoundTimer = setTimeout(function () {
-                                robberTurn(message);
-                            }, roundTime);
-                            roundTime += playerTime;
-                            console.log(`Robber time: ${roundTime / 1000}s`);
-                        }
-
-                        if (roles.Troublemaker) {
-                            //troublemaker switches two cards without looking at them
-                            troublemakerRoundTimer = setTimeout(function () {
-                                troublemakerTurn(message);
-                            }, roundTime);
-                            roundTime += playerTime;
-                            console.log(`Troublemaker time: ${roundTime / 1000}s`);
-                        }
-
-                        //drunk switch one card in the middle without looking at them
-                        if (roles.Drunk) {
-                            drunkRoundTimer = setTimeout(function () {
-                                drunkTurn(message);
-                            }, roundTime);
-                            roundTime += playerTime;
-                            console.log(`Drunk time: ${roundTime / 1000}s`);
-                        }
-
-                        //lastly ask everyone to vote
-                        voteTimer = setTimeout(function () {
-                            voteTurn(message);
-                        }, roundTime);
-                    }
-                })
-                .catch((collected) => {
-                    console.log("Time out. No action after 5mins");
-                    console.log("game terminated");
-                    gameOn = false;
-                    players = [];
+                //send roles to each player
+                message.channel.send(`Please check your pm for your role. Game starting in ${playerTime / 1000}s`);
+                players.forEach((player) => {
+                    player.send(`Your role is...${player.role}! ${getRoleDescription(player.role)}`); //TODO: provide role description
                 });
-        })
-        .catch((error) => {
-            console.log(error);
-            gameOn = false;
-        });
+
+                //night falls
+                if (roles.Werewolf) {
+                    werewolfRoundTimer = setTimeout(function () {
+                        werewolfTurn(message);
+                    }, roundTime);
+                    roundTime += playerTime;
+                    console.log(`Werewolf time: ${roundTime / 1000}s`);
+                }
+
+                //minion wakes up to see who the werewolves are
+                if (roles.Minion) {
+                    minionRoundTimer = setTimeout(function () {
+                        minionTurn(message);
+                    }, roundTime);
+                    roundTime += playerTime;
+                    console.log(`Minion time: ${roundTime / 1000}s`);
+                }
+
+                //ask Seer for 2 cards in the middle or a player
+                if (roles.Seer) {
+                    seerRoundTimer = setTimeout(function () {
+                        seerTurn(message);
+                    }, roundTime);
+                    roundTime += playerTime;
+                    console.log(`Seer time: ${roundTime / 1000}s`);
+                }
+
+                //robber switch one card with a player and see the role
+                if (roles.Robber) {
+                    robberRoundTimer = setTimeout(function () {
+                        robberTurn(message);
+                    }, roundTime);
+                    roundTime += playerTime;
+                    console.log(`Robber time: ${roundTime / 1000}s`);
+                }
+
+                if (roles.Troublemaker) {
+                    //troublemaker switches two cards without looking at them
+                    troublemakerRoundTimer = setTimeout(function () {
+                        troublemakerTurn(message);
+                    }, roundTime);
+                    roundTime += playerTime;
+                    console.log(`Troublemaker time: ${roundTime / 1000}s`);
+                }
+
+                //drunk switch one card in the middle without looking at them
+                if (roles.Drunk) {
+                    drunkRoundTimer = setTimeout(function () {
+                        drunkTurn(message);
+                    }, roundTime);
+                    roundTime += playerTime;
+                    console.log(`Drunk time: ${roundTime / 1000}s`);
+                }
+
+                //lastly ask everyone to vote
+                voteTimer = setTimeout(function () {
+                    voteTurn(message);
+                }, roundTime);
+            })
+            .catch((collected) => {
+                console.log("Time out. No action after 5mins");
+                console.log("game terminated");
+                gameOn = false;
+                players = [];
+            });
+    } catch {
+        console.log(`error`);
+        gameOn = false;
+    }
 }
 
 client.on("message", (message) => {
+    if (!message.content.startsWith(prefix) || message.author.bot || message.channel.type == "dm") return;
+
     if (message.channel.type == "dm") {
-        message.author.send("You're not supposed to message the bot!").catch((error) => {
-            //TODO: fix this error
-            //console.log("Dm error, ignore for now.");
-        });
+        // message.author.send("You're not supposed to message the bot!").catch((error) => {
+        //     //TODO: fix this error
+        //     //console.log("Dm error, ignore for now.");
+        // });
         return;
     }
 
-    if (message.content === `${prefix}play`) {
-        //store host id so only the host can start the game
-        hostId = message.author.id;
+    const args = message.content.slice(prefix.length).split(" ");
+    const command = args.shift().toLowerCase();
 
+    if (command === `play`) {
         //only one game at a time
         if (!gameOn) {
-            oneNightUltimateWerewolf(message);
+            //pass host id so only the host can start the game
+            oneNightUltimateWerewolf(message, message.author.id);
             gameOn = true;
         } else {
             message.channel.send("A game already exists. Type -stop to terminate current session.");
         }
-    } else if (message.content === `${prefix}players`) {
+    } else if (command === `players`) {
         console.log(players.forEach((player) => player.username));
         if (players.length) {
             message.channel.send(players.forEach((player) => player.username));
         } else {
             message.channel.send("No players.");
         }
-    } else if (message.content === `${prefix}stop`) {
+    } else if (command === `stop`) {
         //TODO: add a confirm reaction check
         console.log("game terminated");
         gameOn = false;
@@ -863,11 +861,11 @@ client.on("message", (message) => {
         clearTimeout(drunkRoundTimer);
         clearTimeout(insomniacRoundTimer);
         clearTimeout(voteTimer);
-    } else if (message.content === `${prefix}playerRoles`) {
+    } else if (command === `playerRoles`) {
         players.forEach((player) => console.log(`${player.username} (${player.role})`));
-    } else if (message.content.startsWith(`${prefix}deck`)) {
+    } else if (command === `deck`) {
         console.log(deck);
-    } else if (message.content.startsWith(`${prefix}setRoles`)) {
+    } else if (command === `setRoles`) {
         let args = message.content.slice(`${prefix}setRoles`.length + 1).split(" ");
         //console.log(args);
 
