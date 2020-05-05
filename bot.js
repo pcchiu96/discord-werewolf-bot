@@ -5,7 +5,6 @@ const client = new Discord.Client();
 
 let emoteJoin = "🎮";
 let emoteStart = "🟢";
-let emoteOK = "🆗";
 let emoteCheckMark = "✅";
 let emoteCrossMark = "❌";
 
@@ -42,8 +41,6 @@ client.once("disconnect", () => {
     console.log("Disconnect!");
 });
 
-const allRoles = ["Werewolf", "Villager", "!Seer", "!Witch", "!Hunter", "!Guard", "!Knight"];
-//let roles = { Werewolf: 0, Villager: 0, Seer: 0, Witch: 0, Hunter: 0, Guard: 0, Knight: 0 };
 let roles = {
     Werewolf: 1,
     Minion: 1,
@@ -78,10 +75,10 @@ let gameOn = false;
 let voteOn = false;
 let hostId = "";
 
-let joinWaitTime = 3000000;
-let playerTime = 10000; //time for each player's choice
+let joinWaitTime = 5 * 60 * 1000;
+let playerTime = 1 * 30 * 1000; //time for each player's choice
 let roundTime = playerTime; //each rounds time, this increments based on which roles are the in game
-let discussionTime = 120000; //milliseconds (5mins)
+let discussionTime = 5 * 60 * 1000; //milliseconds (5mins)
 
 let players = [];
 let deck = [];
@@ -115,15 +112,7 @@ function resetExist() {
     };
 }
 
-let werewolfRoundTimer;
-let minionRoundTimer;
-let masonsRoundTimer;
-let seerRoundTimer;
-let robberRoundTimer;
-let troublemakerRoundTimer;
-let drunkRoundTimer;
-let insomniacRoundTimer;
-let voteTimer;
+let werewolfRoundTimer, minionRoundTimer, masonsRoundTimer, seerRoundTimer, robberRoundTimer, troublemakerRoundTimer, drunkRoundTimer, insomniacRoundTimer, voteTimer;
 
 //turns the roles object into an array
 function makeDeck(roles) {
@@ -292,6 +281,21 @@ function halfTimeReminder(player, time) {
 
 function millisecondsToSeconds(milliseconds) {
     return (milliseconds / 1000).toFixed(0);
+}
+
+//TODO: replace halfTimerReminder with this count down
+//it edits the message on an interval
+async function countDown() {
+    let counter = 10;
+    const m = await message.channel.send(`Count down: ${counter}`);
+    let inter = setInterval(() => {
+        counter -= 2;
+        if (counter === 0) {
+            clearTimeout(inter);
+            console.log(`clear`);
+        }
+        m.edit(`Count down: ${counter}`);
+    }, 2 * 1000);
 }
 
 async function werewolfTurn(message) {
@@ -738,27 +742,26 @@ async function oneNightUltimateWerewolf(message) {
             } roles.\nUse '${prefix} roles' to see all the toggled roles.\nEach roles can also be toggled using '${prefix} add/remove role name'.\nThen the host can press the green circle to start the game.`
         );
 
-        // roleSelection.react(emoteRoles.Werewolf);
-        // roleSelection.react(emoteRoles.Villager);
-        // roleSelection.react(emoteRoles.Minion);
-        // roleSelection.react(emoteRoles.Seer);
-        // roleSelection.react(emoteRoles.Robber);
-        // roleSelection.react(emoteRoles.Troublemaker);
-        // roleSelection.react(emoteRoles.Drunk);
-        // roleSelection.react(emoteRoles.Hunter);
-        // roleSelection.react(emoteRoles.Mason);
-        // roleSelection.react(emoteRoles.Insomniac);
-        // roleSelection.react(emoteRoles.Doppelganger);
-        // roleSelection.react(emoteStart);
+        roleSelection.react(emoteStart);
+        roleSelection.react(emoteRoles.Werewolf);
+        roleSelection.react(emoteRoles.Villager);
+        roleSelection.react(emoteRoles.Minion);
+        roleSelection.react(emoteRoles.Seer);
+        roleSelection.react(emoteRoles.Robber);
+        roleSelection.react(emoteRoles.Troublemaker);
+        roleSelection.react(emoteRoles.Drunk);
+        roleSelection.react(emoteRoles.Hunter);
+        roleSelection.react(emoteRoles.Mason);
+        roleSelection.react(emoteRoles.Insomniac);
+        roleSelection.react(emoteRoles.Doppelganger);
 
-        // const rolesFilter = (reaction, user) => reaction.emoji.name === emoteStart && !user.bot && user.id === hostId;
-        // await roleSelection.awaitReactions(rolesFilter, {
-        //     max: 1,
-        //     time: joinWaitTime, //5 mins of wait time
-        //     errors: ["time"],
-        // });
-
-        //roleSelection.delete();
+        const rolesFilter = (reaction, user) => reaction.emoji.name === emoteStart && !user.bot && user.id === hostId;
+        await roleSelection.awaitReactions(rolesFilter, {
+            max: 1,
+            time: joinWaitTime, //5 mins of wait time
+            errors: ["time"],
+        });
+        roleSelection.delete();
 
         message.channel.send(`>>> Game started! Players: ${players}`); //ping all players the game has started
 
@@ -1021,14 +1024,6 @@ client.on("messageReactionRemove", (reaction, user) => {
         votes[emoteKeycaps.indexOf(userEmojiReaction)] -= 1;
         console.log(votes);
     }
-    // else if (Object.values(emoteRoles).includes(userEmojiReaction) && !user.bot && user.id === hostId) {
-    //     let keys = Object.keys(emoteRoles);
-    //     let values = Object.values(emoteRoles);
-    //     let role = keys[values.indexOf(userEmojiReaction)];
-
-    //     roles[role] = 0;
-    //     console.log(`${role} removed`);
-    // }
 });
 
 client.login(token);
