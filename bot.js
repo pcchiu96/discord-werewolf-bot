@@ -44,30 +44,32 @@ client.once("disconnect", () => {
 let roles = {
     Werewolf: 1,
     Minion: 1,
+    Mason: 0,
     Villager: 1,
     Seer: 1,
     Robber: 1,
     Troublemaker: 1,
     Drunk: 1,
-    Hunter: 0, //TODO: missing
-    Mason: 0,
     Insomniac: 0,
-    Doppelganger: 0,
+    Tanner: 0, //TODO: missing
+    Hunter: 0, //TODO: missing
+    Doppelganger: 0, //TODO: missing
 };
 
 let badGuys = ["Werewolf", "Minion"];
 
 let description = {
-    Werewolf: "",
+    Werewolf: "Survive and don't get voted out!",
     Minion: "",
-    Villager: "",
+    Mason: "",
+    Villager: "Find out who is Werewolf and vote him/her out!",
     Seer: "",
     Robber: "",
     Troublemaker: "",
     Drunk: "",
-    Hunter: "",
-    Mason: "",
     Insomniac: "",
+    Tanner: "You hate your job so much that you want to die. Get voted out to win!",
+    Hunter: "When you get voted out, you can shoot a player and kill him/her.",
     Doppelganger: "",
 };
 
@@ -75,13 +77,16 @@ let gameOn = false;
 let voteOn = false;
 let hostId = "";
 
-let joinWaitTime = 5 * 60 * 1000;
-let playerTime = 1 * 30 * 1000; //time for each player's choice
+let second = 1000;
+let minute = 60 * second;
+let joinWaitTime = 5 * minute;
+let playerTime = 30 * second; //time for each player's choice
 let roundTime = playerTime; //each rounds time, this increments based on which roles are the in game
-let discussionTime = 5 * 60 * 1000; //milliseconds (5mins)
+let discussionTime = 5 * minute;
 
 let players = [];
 let deck = [];
+let votes = [];
 let exist = {
     loneWolf: false,
     Werewolf: false,
@@ -92,10 +97,10 @@ let exist = {
     Troublemaker: false,
     Drunk: false,
     Insomniac: false,
+    Tanner: false,
+    Hunter: false,
     Doppelganger: false,
 };
-
-let votes = [];
 
 function resetExist() {
     exist = {
@@ -108,18 +113,28 @@ function resetExist() {
         Troublemaker: false,
         Drunk: false,
         Insomniac: false,
+        Tanner: false,
+        Hunter: false,
         Doppelganger: false,
     };
 }
 
-let werewolfRoundTimer, minionRoundTimer, masonsRoundTimer, seerRoundTimer, robberRoundTimer, troublemakerRoundTimer, drunkRoundTimer, insomniacRoundTimer, voteTimer;
+let werewolfRoundTimer,
+    minionRoundTimer,
+    masonsRoundTimer,
+    seerRoundTimer,
+    robberRoundTimer,
+    troublemakerRoundTimer,
+    drunkRoundTimer,
+    insomniacRoundTimer,
+    doppelgangerRoundTimer,
+    voteTimer;
 
 //turns the roles object into an array
 function makeDeck(roles) {
     let rolesArray = [];
     let werewolves = Array(roles.Werewolf).fill("Werewolf");
     let villagers = Array(roles.Villager).fill("Villager");
-
     let minion = Array(roles.Minion).fill("Minion");
     let mason = Array(roles.Mason).fill("Mason");
     let seer = Array(roles.Seer).fill("Seer");
@@ -127,8 +142,21 @@ function makeDeck(roles) {
     let troublemaker = Array(roles.Troublemaker).fill("Troublemaker");
     let drunk = Array(roles.Drunk).fill("Drunk");
     let insomniac = Array(roles.Insomniac).fill("Insomniac");
+    let tanner = Array(roles.Tanner).fill("Tanner");
+    let hunter = Array(roles.Hunter).fill("Hunter");
+    //let doppelganger = Array(roles.Doppelganger).fill("Doppelganger");
 
-    rolesArray = werewolves.concat(villagers).concat(minion).concat(mason).concat(seer).concat(robber).concat(troublemaker).concat(drunk).concat(insomniac);
+    rolesArray = werewolves
+        .concat(villagers)
+        .concat(minion)
+        .concat(mason)
+        .concat(seer)
+        .concat(robber)
+        .concat(troublemaker)
+        .concat(drunk)
+        .concat(insomniac)
+        .concat(tanner)
+        .concat(hunter);
 
     return rolesArray;
 }
@@ -145,7 +173,8 @@ function shuffleDeck(rolesArray) {
     }
 }
 
-//this assign the roles by shuffling the rolesArray
+//assign roles to each player after shuffling the deck
+//this also saves which role is handed to which player so the bot knows which player to dm
 function assignRoles() {
     let wolfCount = 0;
     deck = makeDeck(roles);
@@ -167,6 +196,7 @@ function assignRoles() {
     }
 }
 
+//reassign the roles after all swaps have been made
 function reassignRoles() {
     let wolfCount = 0;
 
@@ -186,6 +216,7 @@ function reassignRoles() {
     }
 }
 
+//resets the exist roles in each players hand
 function refreshExist() {
     resetExist();
     let wolfCount = 0;
@@ -204,6 +235,7 @@ function refreshExist() {
     }
 }
 
+//gets the player's teammate with the same role
 function getTeammate(player) {
     let teammateNames = "";
     let teammateCount = 0;
@@ -240,6 +272,7 @@ function getWerewolves() {
     return werewolves;
 }
 
+//get all the players in the game with their joined number and username
 function getEveryone() {
     let everyone = "\n";
     let count = 0;
@@ -285,7 +318,7 @@ function millisecondsToSeconds(milliseconds) {
 
 //TODO: replace halfTimerReminder with this count down
 //it edits the message on an interval
-async function countDown() {
+async function countDown(message) {
     let counter = 10;
     const m = await message.channel.send(`Count down: ${counter}`);
     let inter = setInterval(() => {
@@ -380,7 +413,9 @@ async function seerTurn(message) {
 
     let t0 = performance.now(); //start time to keep tract of player's choice time
     let player = players.find((player) => player.role === "Seer");
-    const dm = await player.send(`>>> You may look at another player's card (${emotePlayerChoice}) or 2 cards from the middle (${emoteMiddleChoice}). (Timer: ${millisecondsToSeconds(playerTime)}s)`);
+    const dm = await player.send(
+        `>>> You may look at another player's card (${emotePlayerChoice}) or 2 cards from the middle (${emoteMiddleChoice}). (Timer: ${millisecondsToSeconds(playerTime)}s)`
+    );
     //show emotes in 🔮, 🃏 for the Seer to pick
     await dm.react(emotePlayerChoice);
     await dm.react(emoteMiddleChoice);
@@ -527,12 +562,6 @@ async function robberTurn(message) {
         let indexSelf = deck.indexOf(player.role);
         let card = deck[indexChoice];
 
-        //exchanging roles
-        // console.log(`${player.username} (${player.role}) exchanged with ${players[indexChoice].username} (${players[indexChoice].role}) `);
-        // player.role = card;
-        // players[indexChoice].role = "Robber";
-        // console.log(`${player.username} is now (${player.role}) and ${players[indexChoice].username} is now (${players[indexChoice].role}) `);
-
         //Also exchange the cards in the deck
         deck[indexChoice] = "Robber";
         deck[indexSelf] = card;
@@ -613,7 +642,11 @@ async function drunkTurn(message) {
     }, playerTime / 2);
 
     let player = players.find((player) => player.role === "Drunk");
-    const dm = await player.send(`>>> You must exchange your card with a card in the middle without knowing the role. If non-selected, a random card will be exchanged. (Timer: ${millisecondsToSeconds(playerTime)}s)`);
+    const dm = await player.send(
+        `>>> You must exchange your card with a card in the middle without knowing the role. If non-selected, a random card will be exchanged. (Timer: ${millisecondsToSeconds(
+            playerTime
+        )}s)`
+    );
     for (let i = 0; i < 3; i++) {
         await dm.react(emoteKeycaps[i]);
     }
@@ -677,6 +710,26 @@ function insomniacTurn(message) {
     player.send(`>>> You stayed up the entire night. ${player.role !== newRole ? `You have been swapped! Your role is now ${newRole}` : `You are still ${player.role}`}`);
 }
 
+async function hunterTurn(message, player) {
+    const hunter = await votedOut.send(`>>> Pick a player you would like to shoot.`);
+    for (let i = 0; i < players.length; i++) {
+        hunter.react(emoteKeycaps[i]);
+    }
+
+    try {
+        const collected = await hunter.awaitReactions(keycapsFilter, {
+            max: 1,
+            time: playerTime,
+            errors: ["time"],
+        });
+
+        //TODO: return the result and handle the promise in vote
+    } catch (error) {
+        console.log(`Time out. Hunter (${player.username}) did nothing.`);
+        player.send(`>>> Time out. You decided to not shoot anyone.`);
+    }
+}
+
 async function voteTurn(message) {
     //refresh which roles exist in each player's hand
     refreshExist();
@@ -701,21 +754,49 @@ async function voteTurn(message) {
 
     setTimeout(function () {
         message.channel.send(`>>> Discussion time is up! The results are...`);
-        let highestVote = Math.max(...votes); //This doens't include 2 of the same votes
+
+        //TODO: if there are two highest vote, both players are killed off
+        let highestVote = Math.max(...votes);
         let votedOut = players[votes.indexOf(highestVote)];
         console.log(`${votedOut.username} got the highest ${highestVote} vote(s)`);
 
-        //special case when all bad guys are in the middle
-        if (highestVote === 0 && !exist.Werewolf && !exist.Minion) {
-            message.channel.send(`>>> There are no Werewolves! ${getGoodGuys()}win!`);
-        } else if (votedOut.role === "Werewolf") {
+        //single highest vote
+        switch (votedOut.role) {
+            case "Werewolf":
+                message.channel.send(`>>> ${votedOut.username} is a Werewolf!${getGoodGuys()}win!`);
+                break;
+            case "Minion":
+                if (!exist.Werewolf) {
+                    message.channel.send(`>>> ${votedOut.username} is the only Minion! And there are no Werewolves!${getGoodGuys()}win!`);
+                } else {
+                    message.channel.send(`>>> ${votedOut.username} is not a Werewolf!${getBadGuys()}win!`);
+                }
+                break;
+            case "Tanner":
+                message.channel.send(`>>> ${votedOut.username} is a Tanner! Only ${votedOut.username} wins!`);
+                break;
+            case "Hunter":
+                message.channel.send(`>>> ${votedOut.username} is a Hunter! Pick a player you would like to shoot.`);
+                hunterTurn(message, votedOut);
+                break;
+        }
+
+        if (votedOut.role === "Werewolf") {
             message.channel.send(`>>> ${votedOut.username} is a Werewolf!${getGoodGuys()}win!`);
+            //special case when all bad guys are in the middle
+        } else if (highestVote === 0 && !exist.Werewolf && !exist.Minion) {
+            message.channel.send(`>>> There are no Werewolves! ${getGoodGuys()}win!`);
+
             //special condition for minion and no werewolves
         } else if (votedOut.role === "Minion" && !exist.Werewolf) {
             message.channel.send(`>>> ${votedOut.username} is not a Werewolf! There are no Werewolves!${getGoodGuys()}win!`);
         } else {
             message.channel.send(`>>> ${votedOut.username} is not a Werewolf!${getBadGuys()}win!`);
         }
+
+        //TODO: tanner role and hunter
+
+        //TODO need a better log for all actions
     }, discussionTime);
 }
 
@@ -771,7 +852,7 @@ async function oneNightUltimateWerewolf(message) {
         //send roles to each player
         message.channel.send(`>>> Please check your pm for your role. Game starting in ${millisecondsToSeconds(playerTime)}s`);
         players.forEach((player) => {
-            player.send(`>>> Your role is...${player.role}! ${getRoleDescription(player.role)}`); //TODO: provide role description
+            player.send(`>>> Your role is...${player.role}! ${getRoleDescription(player.role)}`);
         });
 
         //night falls
@@ -779,7 +860,6 @@ async function oneNightUltimateWerewolf(message) {
             werewolfRoundTimer = setTimeout(function () {
                 werewolfTurn(message);
             }, roundTime);
-            roundTime += playerTime;
             console.log(`Werewolf time: ${millisecondsToSeconds(roundTime)}s`);
         }
 
@@ -788,7 +868,6 @@ async function oneNightUltimateWerewolf(message) {
             minionRoundTimer = setTimeout(function () {
                 minionTurn(message);
             }, roundTime);
-            roundTime += playerTime;
             console.log(`Minion time: ${millisecondsToSeconds(roundTime)}s`);
         }
 
@@ -797,8 +876,12 @@ async function oneNightUltimateWerewolf(message) {
             masonRoundTimer = setTimeout(function () {
                 masonTurn(message);
             }, roundTime);
-            roundTime += playerTime;
             console.log(`Mason time: ${millisecondsToSeconds(roundTime)}s`);
+        }
+
+        //Werewolf, Minion and Mason can all go at once
+        if (roles.Werewolf || roles.Minion || roles.Mason) {
+            roundTime += playerTime;
         }
 
         //ask Seer for 2 cards in the middle or a player
@@ -1005,7 +1088,7 @@ client.on("messageReactionAdd", (reaction, user) => {
         if (role === "Mason") {
             roles[role] = 2;
         } else {
-            roles[role] = 1;
+            roles[role] += 1;
         }
         console.log(`${role} added`);
     }
