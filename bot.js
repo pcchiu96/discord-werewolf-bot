@@ -80,9 +80,9 @@ let hostId = "";
 let second = 1000;
 let minute = 60 * second;
 let joinWaitTime = 5 * minute;
-let playerTime = 10 * second; //30 * second; //time for each player's choice
-let roundTime = playerTime; //each rounds time, this increments based on which roles are the in game
-let discussionTime = 10 * second; //5 * minute;
+let playerTime = 30 * second; //time for each player's choice
+let roundTime = playerTime; //each role's round time, this increments based on which roles are the in game
+let discussionTime = 3 * minute;
 
 let players = [];
 let voted = {};
@@ -320,12 +320,13 @@ function millisecondsToSeconds(milliseconds) {
 //TODO: replace halfTimerReminder with this count down
 //it edits the message on an interval
 async function countDown(message) {
-    let counter = 10;
+    let counter = 4;
     const m = await message.channel.send(`Count down: ${counter}`);
     let inter = setInterval(() => {
         counter -= 2;
         if (counter === 0) {
             clearTimeout(inter);
+            m.delete({ timeout: 1000 });
             console.log(`clear`);
         }
         m.edit(`Count down: ${counter}`);
@@ -906,7 +907,6 @@ async function oneNightUltimateWerewolf(message) {
 
         welcomeMessage.delete();
 
-        //TODO: refresh this to prevent flooding
         const roleSelection = await message.channel.send(
             `>>> Please select ${
                 players.length + 3
@@ -1024,14 +1024,13 @@ async function oneNightUltimateWerewolf(message) {
             voteTurn(message);
         }, roundTime + 5000); //extra 5s to let the vote run);
     } catch (error) {
-        console.log("Time out. No action after 5mins");
-        console.log("game terminated");
+        console.log("Time out. No action after 5mins. Game terminated");
         gameOn = false;
         players = [];
     }
 }
 
-client.on("message", (message) => {
+client.on("message", async (message) => {
     if (!message.content.startsWith(prefix) || message.author.bot || message.channel.type == "dm") return;
 
     const args = message.content.slice(prefix.length + 1).split(/ +/); //including space
@@ -1061,8 +1060,8 @@ client.on("message", (message) => {
         message.channel.send("Game terminated.");
         console.log("game terminated");
         gameOn = false;
-        hostId = "";
         voteOn = false;
+        hostId = "";
         players = [];
         roundTime = playerTime;
         votes = [];
@@ -1096,7 +1095,9 @@ client.on("message", (message) => {
             }
         });
 
-        message.channel.send(`>>> ${rolesString}`);
+        let counter = 5;
+        const selfDestruct = await message.channel.send(`>>> ${rolesString}Self Destruct in: ${counter}s`);
+        selfDestruct.delete({ timeout: counter * second });
     } else if (command === `add`) {
         if (!args.length) return message.channel.send(`>>> Missing role(s).`);
 
