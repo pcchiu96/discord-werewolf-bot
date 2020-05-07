@@ -45,14 +45,14 @@ let roles = {
     Werewolf: 1,
     Minion: 1,
     Mason: 0,
-    Villager: 1,
-    Seer: 1,
+    Villager: 0,
+    Seer: 0,
     Robber: 1,
-    Troublemaker: 1,
-    Drunk: 1,
+    Troublemaker: 0,
+    Drunk: 0,
     Insomniac: 0,
-    Tanner: 0, //TODO: missing
-    Hunter: 0, //TODO: missing
+    Tanner: 1,
+    Hunter: 1,
     Doppelganger: 0, //TODO: missing
 };
 
@@ -80,11 +80,12 @@ let hostId = "";
 let second = 1000;
 let minute = 60 * second;
 let joinWaitTime = 5 * minute;
-let playerTime = 30 * second; //time for each player's choice
+let playerTime = 10 * second; //30 * second; //time for each player's choice
 let roundTime = playerTime; //each rounds time, this increments based on which roles are the in game
-let discussionTime = 5 * minute;
+let discussionTime = 10 * second; //5 * minute;
 
 let players = [];
+let voted = {};
 let deck = [];
 let votes = [];
 let exist = {
@@ -711,7 +712,7 @@ function insomniacTurn(message) {
 }
 
 async function hunterTurn(message, player) {
-    const hunter = await votedOut.send(`>>> Pick a player you would like to shoot.`);
+    const hunter = await player.send(`>>> Pick a player you would like to shoot.`);
     for (let i = 0; i < players.length; i++) {
         hunter.react(emoteKeycaps[i]);
     }
@@ -723,11 +724,61 @@ async function hunterTurn(message, player) {
             errors: ["time"],
         });
 
-        //TODO: return the result and handle the promise in vote
+        let choice = collected.first().emoji.name;
+
+        let index = emoteKeycaps.indexOf(choice);
+        let shot = players[index];
+
+        oneHighestVote(message, shot);
     } catch (error) {
         console.log(`Time out. Hunter (${player.username}) did nothing.`);
         player.send(`>>> Time out. You decided to not shoot anyone.`);
+
+        let highestVote = Math.max(...votes);
+        let occurrence = getOccurrence(highestVote, votes);
+        let highestIndex = votes.indexOf(highestVote);
+        let votedOut = players[highestIndex];
+
+        //double highest votes
+        if (occurrence === 1) {
+            if (votedOut.username === player.username) {
+                //find second highest vote player
+                let secondHighestIndex = votes.indexOf(highestVote, highestIndex + 1);
+                let secondVotedOut = players[secondHighestIndex];
+                message.channel.send(`>>> ${player.username} did not shoot anyone!`);
+                oneHighestVote(message, secondVotedOut);
+            } else {
+                //if already the second highest vote player
+                message.channel.send(`>>> ${player.username} did not shoot anyone!`);
+                oneHighestVote(message, votedOut);
+            }
+            //otherwise one highest vote
+        } else {
+            if (!exist.Werewolf) {
+                message.channel.send(`>>> ${player.username} did not shoot anyone! Smart! Because there are no werewolves!${getGoodGuys()}win!`);
+            } else {
+                message.channel.send(`>>> ${player.username} did not shoot anyone!${getBadGuys()}win!`);
+            }
+        }
     }
+}
+
+//gets the highest occurence of the number in array
+//if no occurrence, return 0
+//if 2 occurrence, return 1
+//otherwise return -1
+function getOccurrence(number, array) {
+    if (number === 0) return -1;
+    let occurrence = 0;
+    for (let i = 0; i < array.length; i++) {
+        if (number === array[i]) {
+            occurrence += 1;
+        }
+    }
+
+    if (occurrence === 1) return 0;
+    if (occurrence === 2) return 1;
+    return -1;
 }
 
 async function voteTurn(message) {
@@ -754,50 +805,89 @@ async function voteTurn(message) {
 
     setTimeout(function () {
         message.channel.send(`>>> Discussion time is up! The results are...`);
-
-        //TODO: if there are two highest vote, both players are killed off
         let highestVote = Math.max(...votes);
-        let votedOut = players[votes.indexOf(highestVote)];
+        let occurrence = getOccurrence(highestVote, votes);
+        let highestIndex = votes.indexOf(highestVote);
+        let votedOut = players[highestIndex];
         console.log(`${votedOut.username} got the highest ${highestVote} vote(s)`);
 
-        //single highest vote
-        switch (votedOut.role) {
-            case "Werewolf":
-                message.channel.send(`>>> ${votedOut.username} is a Werewolf!${getGoodGuys()}win!`);
-                break;
-            case "Minion":
-                if (!exist.Werewolf) {
-                    message.channel.send(`>>> ${votedOut.username} is the only Minion! And there are no Werewolves!${getGoodGuys()}win!`);
-                } else {
-                    message.channel.send(`>>> ${votedOut.username} is not a Werewolf!${getBadGuys()}win!`);
-                }
-                break;
-            case "Tanner":
-                message.channel.send(`>>> ${votedOut.username} is a Tanner! Only ${votedOut.username} wins!`);
-                break;
-            case "Hunter":
-                message.channel.send(`>>> ${votedOut.username} is a Hunter! Pick a player you would like to shoot.`);
-                hunterTurn(message, votedOut);
-                break;
+        //double highest votes
+        if (occurrence === 1) {
+            let secondHighestIndex = votes.indexOf(highestVote, highestIndex + 1);
+            let secondVotedOut = players[secondHighestIndex];
+            twoHighestVote(message, votedOut, secondVotedOut);
+        } else if (occurrence === 0) {
+            //single highest vote
+            oneHighestVote(message, votedOut);
+            //multiple highest same votes
+        } else if (occurrence === -1) {
+            if (exist.Werewolf || exist.Minion) {
+                message.channel.send(`>>> Not enough votes! ${getBadGuys()}win!.`);
+            } else {
+                message.channel.send(`>>> Not enough votes! Good thing there are no bad guys!${getGoodGuys()}win!`);
+            }
         }
-
-        if (votedOut.role === "Werewolf") {
-            message.channel.send(`>>> ${votedOut.username} is a Werewolf!${getGoodGuys()}win!`);
-            //special case when all bad guys are in the middle
-        } else if (highestVote === 0 && !exist.Werewolf && !exist.Minion) {
-            message.channel.send(`>>> There are no Werewolves! ${getGoodGuys()}win!`);
-
-            //special condition for minion and no werewolves
-        } else if (votedOut.role === "Minion" && !exist.Werewolf) {
-            message.channel.send(`>>> ${votedOut.username} is not a Werewolf! There are no Werewolves!${getGoodGuys()}win!`);
-        } else {
-            message.channel.send(`>>> ${votedOut.username} is not a Werewolf!${getBadGuys()}win!`);
-        }
-
-        //TODO: tanner role and hunter
 
         //TODO need a better log for all actions
     }, discussionTime);
+}
+
+function twoHighestVote(message, votedOut, secondVotedOut) {
+    //tanner overrides all other roles
+    if (votedOut.role === "Tanner" || secondVotedOut.role === "Tanner") {
+        message.channel.send(`>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}. Only Tanner win!`);
+    } else if (votedOut.role === "Werewolf" || secondVotedOut.role === "Werewolf") {
+        message.channel.send(`>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}${getGoodGuys()}win!`);
+    } else if (!exist.Werewolf && (votedOut.role === "Minion" || secondVotedOut.role === "Minion")) {
+        //checks only minion before hunter
+        //minion becomes werewolf if there are no werewolves in play
+        message.channel.send(
+            `>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}. And there are no Werewolves!${getGoodGuys()}win!`
+        );
+    } else if (votedOut.role === "Hunter" || secondVotedOut.role === "Hunter") {
+        let player = players.find((player) => player.role === "Hunter");
+        message.channel.send(
+            `>>> ${votedOut.username} and ${secondVotedOut.username} got the highest votes. But ${player.username} is Hunter, pick a player that you would like to shoot.`
+        );
+        hunterTurn(message, votedOut);
+    } else if (votedOut.role === "Minion" || secondVotedOut.role === "Minion") {
+        message.channel.send(`>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}${getBadGuys()}win!`);
+    } else {
+        if (!exist.Werewolf) {
+            message.channel.send(
+                `>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}. There are no werewolves!${getGoodGuys()}lose!`
+            );
+        } else {
+            message.channel.send(`>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}.${getBadGuys()}win!`);
+        }
+    }
+}
+
+function oneHighestVote(message, votedOut) {
+    //single highest vote
+    if (votedOut.role === "Tanner") {
+        //tanner only wins if he's voted out
+        message.channel.send(`>>> ${votedOut.username} is a Tanner! Only ${votedOut.username} wins!`);
+    } else if (votedOut.role === "Werewolf") {
+        message.channel.send(`>>> ${votedOut.username} is a Werewolf!${getGoodGuys()}win!`);
+    } else if (votedOut.role === "Hunter") {
+        message.channel.send(`>>> ${votedOut.username} is a Hunter! Pick a player you would like to shoot.`);
+        hunterTurn(message, votedOut);
+    } else if (votedOut.role === "Minion") {
+        //minion becomes werewolf if there are no werewolves in play
+        if (!exist.Werewolf) {
+            message.channel.send(`>>> ${votedOut.username} is the only Minion! And there are no Werewolves!${getGoodGuys()}win!`);
+        } else {
+            message.channel.send(`>>> ${votedOut.username} is not a Werewolf!${getBadGuys()}win!`);
+        }
+    } else {
+        //any other roles
+        if (!exist.Werewolf) {
+            message.channel.send(`>>> ${votedOut.username} is not a Werewolf. There are no werewolves!${getGoodGuys()}lose!`);
+        } else {
+            message.channel.send(`>>> ${votedOut.username} is not a Werewolf.${getBadGuys()}win!`);
+        }
+    }
 }
 
 async function oneNightUltimateWerewolf(message) {
@@ -824,17 +914,17 @@ async function oneNightUltimateWerewolf(message) {
         );
 
         roleSelection.react(emoteStart);
-        roleSelection.react(emoteRoles.Werewolf);
-        roleSelection.react(emoteRoles.Villager);
-        roleSelection.react(emoteRoles.Minion);
-        roleSelection.react(emoteRoles.Seer);
-        roleSelection.react(emoteRoles.Robber);
-        roleSelection.react(emoteRoles.Troublemaker);
-        roleSelection.react(emoteRoles.Drunk);
-        roleSelection.react(emoteRoles.Hunter);
-        roleSelection.react(emoteRoles.Mason);
-        roleSelection.react(emoteRoles.Insomniac);
-        roleSelection.react(emoteRoles.Doppelganger);
+        // roleSelection.react(emoteRoles.Werewolf);
+        // roleSelection.react(emoteRoles.Villager);
+        // roleSelection.react(emoteRoles.Minion);
+        // roleSelection.react(emoteRoles.Seer);
+        // roleSelection.react(emoteRoles.Robber);
+        // roleSelection.react(emoteRoles.Troublemaker);
+        // roleSelection.react(emoteRoles.Drunk);
+        // roleSelection.react(emoteRoles.Hunter);
+        // roleSelection.react(emoteRoles.Mason);
+        // roleSelection.react(emoteRoles.Insomniac);
+        // roleSelection.react(emoteRoles.Doppelganger);
 
         const rolesFilter = (reaction, user) => reaction.emoji.name === emoteStart && !user.bot && user.id === hostId;
         await roleSelection.awaitReactions(rolesFilter, {
@@ -976,6 +1066,7 @@ client.on("message", (message) => {
         players = [];
         roundTime = playerTime;
         votes = [];
+        voted = {};
         resetExist();
         clearTimeout(werewolfRoundTimer);
         clearTimeout(seerRoundTimer);
@@ -1074,10 +1165,9 @@ client.on("messageReactionAdd", (reaction, user) => {
         console.log(`${userEmojiReaction} got selected`);
 
         let player = players.find((player) => player.username === user.username);
+        if (voted[player.username]) return;
 
-        if (player.voted) return;
-
-        player.voted = true;
+        voted[player.username] = true;
         votes[emoteKeycaps.indexOf(userEmojiReaction)] += 1;
         console.log(votes);
     } else if (Object.values(emoteRoles).includes(userEmojiReaction) && !user.bot && user.id === hostId) {
@@ -1102,11 +1192,12 @@ client.on("messageReactionRemove", (reaction, user) => {
             players.findIndex((i) => i.id === user.id),
             1
         );
-    } else if (emoteKeycaps.includes(userEmojiReaction) && !user.bot && voteOn) {
-        console.log(`${userEmojiReaction} got selected`);
-        votes[emoteKeycaps.indexOf(userEmojiReaction)] -= 1;
-        console.log(votes);
     }
+    // else if (emoteKeycaps.includes(userEmojiReaction) && !user.bot && voteOn) {
+    //     console.log(`${userEmojiReaction} got selected`);
+    //     votes[emoteKeycaps.indexOf(userEmojiReaction)] -= 1;
+    //     console.log(votes);
+    // }
 });
 
 client.login(token);
