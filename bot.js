@@ -45,12 +45,12 @@ let roles = {
     Werewolf: 1,
     Minion: 0,
     Mason: 0,
-    Villager: 0,
-    Seer: 0,
-    Robber: 0,
+    Villager: 1,
+    Seer: 1,
+    Robber: 1,
     Troublemaker: 1,
     Drunk: 0,
-    Insomniac: 1,
+    Insomniac: 0,
     Tanner: 0,
     Hunter: 0,
     Doppelganger: 0, //TODO: missing
@@ -753,6 +753,7 @@ function insomniacTurn(message) {
     player.send(`>>> You stayed up the entire night. ${player.role !== newRole ? `You have been swapped! Your role is now ${newRole}` : `You are still ${player.role}`}`);
 }
 
+//TODO hunter shouldn't be able to shoot himself
 async function hunterTurn(message, player) {
     const hunter = await player.send(`>>> Pick a player you would like to shoot.`);
     for (let i = 0; i < players.length; i++) {
@@ -869,9 +870,6 @@ async function voteTurn(message) {
                 message.channel.send(`>>> Not enough votes! Good thing there are no bad guys!${getGoodGuys()}win!`);
             }
         }
-
-        //TODO: attach vote log
-        message.channel.send(`>>> ${gameLog}`);
     }, discussionTime);
 }
 
@@ -992,7 +990,6 @@ async function oneNightUltimateWerewolf(message) {
             werewolfRoundTimer = setTimeout(function () {
                 werewolfTurn(message);
             }, roundTime);
-            console.log(`Werewolf time: ${millisecondsToSeconds(roundTime)}s`);
         }
 
         //minion wakes up to see who the werewolves are
@@ -1000,7 +997,6 @@ async function oneNightUltimateWerewolf(message) {
             minionRoundTimer = setTimeout(function () {
                 minionTurn(message);
             }, roundTime);
-            console.log(`Minion time: ${millisecondsToSeconds(roundTime)}s`);
         }
 
         //mason see each other
@@ -1008,11 +1004,11 @@ async function oneNightUltimateWerewolf(message) {
             masonRoundTimer = setTimeout(function () {
                 masonTurn(message);
             }, roundTime);
-            console.log(`Mason time: ${millisecondsToSeconds(roundTime)}s`);
         }
 
         //Werewolf, Minion and Mason can all go at once
         if (roles.Werewolf || roles.Minion || roles.Mason) {
+            console.log(`Werewolf, Minion, Mason time: ${millisecondsToSeconds(roundTime)}s`);
             roundTime += playerTime;
         }
 
@@ -1021,8 +1017,8 @@ async function oneNightUltimateWerewolf(message) {
             seerRoundTimer = setTimeout(function () {
                 seerTurn(message);
             }, roundTime);
-            roundTime += playerTime;
             console.log(`Seer time: ${millisecondsToSeconds(roundTime)}s`);
+            roundTime += playerTime;
         }
 
         //robber switch one card with a player and see the role
@@ -1030,8 +1026,8 @@ async function oneNightUltimateWerewolf(message) {
             robberRoundTimer = setTimeout(function () {
                 robberTurn(message);
             }, roundTime);
-            roundTime += playerTime;
             console.log(`Robber time: ${millisecondsToSeconds(roundTime)}s`);
+            roundTime += playerTime;
         }
 
         if (roles.Troublemaker) {
@@ -1039,8 +1035,8 @@ async function oneNightUltimateWerewolf(message) {
             troublemakerRoundTimer = setTimeout(function () {
                 troublemakerTurn(message);
             }, roundTime);
-            roundTime += playerTime;
             console.log(`Troublemaker time: ${millisecondsToSeconds(roundTime)}s`);
+            roundTime += playerTime;
         }
 
         //drunk switch one card in the middle without looking at them
@@ -1048,8 +1044,8 @@ async function oneNightUltimateWerewolf(message) {
             drunkRoundTimer = setTimeout(function () {
                 drunkTurn(message);
             }, roundTime);
-            roundTime += playerTime;
             console.log(`Drunk time: ${millisecondsToSeconds(roundTime)}s`);
+            roundTime += playerTime;
         }
 
         //insomniac stays awake and knows if he/she got swapped
@@ -1057,14 +1053,15 @@ async function oneNightUltimateWerewolf(message) {
             insomniacRoundTimer = setTimeout(function () {
                 insomniacTurn(message);
             }, roundTime);
-            roundTime += playerTime;
             console.log(`Insomniac time: ${millisecondsToSeconds(roundTime)}s`);
+            roundTime += playerTime;
         }
 
         //lastly ask everyone to vote
         voteTimer = setTimeout(function () {
             voteTurn(message);
-        }, roundTime + 5000); //extra 5s to let the vote run);
+        }, roundTime);
+        console.log(`Vote time: ${millisecondsToSeconds(roundTime)}s`);
     } catch (error) {
         console.log("Time out. No action after 5mins. Game terminated");
         gameOn = false;
@@ -1085,6 +1082,7 @@ client.on("message", async (message) => {
             oneNightUltimateWerewolf(message);
             gameOn = true;
             hostId = message.author.id;
+            gameLog = `Game Log:\n`;
         } else {
             message.channel.send(`>>> A game already exists. Type '${prefix} stop' to terminate current session.`);
         }
@@ -1105,7 +1103,7 @@ client.on("message", async (message) => {
         voteOn = false;
         hostId = "";
         players = [];
-        gameLog = "";
+        //gameLog = `Game Log:\n`; //game log does not get erased until new game starts
         roundTime = playerTime;
         votes = [];
         voted = {};
@@ -1196,6 +1194,25 @@ client.on("message", async (message) => {
             });
         }
         message.channel.send(`>>> ${removedRoles}`);
+    } else if (command === `set`) {
+        if (!args.length)
+            return message.channel.send(
+                `>>> Missing timer type. Use '${prefix} timer (seconds) to set each round's timer or  '${prefix} discussion (seconds) to set the discussion timer`
+            );
+        if (!args[1]) return message.channel.send(`>>> Missing timer input in (seconds).`);
+
+        if (args[0] === "timer") {
+            playerTime = parseInt(args[1]) * second;
+            message.channel.send(`>>> Timer for each round is now ${args[1]}s`);
+            console.log(`Timer for each round is now ${playerTime}`);
+        } else if (args[0] === "discussion") {
+            discussionTime = parseInt(args[1]) * second;
+            message.channel.send(`>>> Timer for each round is now ${args[1]}s`);
+            console.log(`Timer for discussion round is now ${discussionTime}`);
+        }
+    } else if (command === "log") {
+        if (gameOn) return message.channel.send(`>>> A game still exists. Please use '${prefix} stop' to terminate the game before using this command.`);
+        message.channel.send(`>>> ${gameLog === `Game Log:\n` ? "No Game Log" : gameLog}`);
     }
 });
 
