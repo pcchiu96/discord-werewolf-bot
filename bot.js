@@ -43,16 +43,16 @@ client.once("disconnect", () => {
 
 let roles = {
     Werewolf: 1,
-    Minion: 1,
+    Minion: 0,
     Mason: 0,
     Villager: 0,
     Seer: 0,
-    Robber: 1,
-    Troublemaker: 0,
+    Robber: 0,
+    Troublemaker: 1,
     Drunk: 0,
-    Insomniac: 0,
-    Tanner: 1,
-    Hunter: 1,
+    Insomniac: 1,
+    Tanner: 0,
+    Hunter: 0,
     Doppelganger: 0, //TODO: missing
 };
 
@@ -80,14 +80,18 @@ let hostId = "";
 let second = 1000;
 let minute = 60 * second;
 let joinWaitTime = 5 * minute;
-let playerTime = 30 * second; //time for each player's choice
+//let playerTime = 30 * second; //time for each player's choice
+let playerTime = 10 * second;
 let roundTime = playerTime; //each role's round time, this increments based on which roles are the in game
-let discussionTime = 3 * minute;
+//let discussionTime = 3 * minute;
+let discussionTime = 10 * second;
 
 let players = [];
 let voted = {};
 let deck = [];
 let votes = [];
+let gameLog = `Game Log:\n`;
+
 let exist = {
     loneWolf: false,
     Werewolf: false,
@@ -360,24 +364,30 @@ async function werewolfTurn(message) {
 
             clearTimeout(timeReminder);
             const loneWolfReaction = collected.first().emoji.name;
+            let index;
+            let number;
 
             switch (loneWolfReaction) {
                 case emoteKeycaps[0]: //1️⃣
-                    player.send(`>>> The card is (${deck[deck.length - 3]})`);
-                    console.log(`${player.username} (Lone Wolf) picked card 1 from the middle (${deck[deck.length - 3]})`);
+                    index = deck.length - 3;
+                    number = 1;
                     break;
                 case emoteKeycaps[1]: //2️⃣
-                    player.send(`>>> The card is (${deck[deck.length - 2]})`);
-                    console.log(`${player.username} (Lone Wolf) picked card 2 from the middle (${deck[deck.length - 2]})`);
+                    index = deck.length - 2;
+                    number = 2;
                     break;
                 case emoteKeycaps[2]: //3️⃣
-                    player.send(`>>> The card is (${deck[deck.length - 1]})`);
-                    console.log(`${player.username} (Lone Wolf) picked card 3 from the middle (${deck[deck.length - 1]})`);
+                    index = deck.length - 1;
+                    number = 3;
                     break;
             }
+            player.send(`>>> Card ${number} is (${deck[index]})`);
+            console.log(`${player.username} (Lone Wolf) picked card ${number} (${deck[index]}) from the middle`);
+            gameLog += `${player.username} (Lone Wolf) picked card ${number} (${deck[index]}) from the middle\n`;
         } catch (error) {
-            console.log(`Time out. ${player.username} (Lone Wolf) did not pick a card from the middle`);
             player.send(`>>> Time out. You decided not to pick a card from the middle.`);
+            console.log(`Time out. ${player.username} (Lone Wolf) did not pick a card from the middle`);
+            gameLog += `Time out. ${player.username} (Lone Wolf) did not pick a card from the middle\n`;
         }
     } else {
         players.forEach((player) => {
@@ -451,13 +461,16 @@ async function seerTurn(message) {
 
                 clearTimeout(timeReminder);
                 const seerPlayerChoice = collectedPlayerCard.first();
-                let index = emoteKeycaps.indexOf(seerPlayerChoice.emoji.name);
+                let index = emoteKeycaps.indexOf(seerPlayerChoice.emoji.name) + 1;
                 let card = deck[index];
+
                 player.send(`>>> ${players[index].username} is (${card})`);
-                console.log(`${player.username} (Seer) checked card ${index + 1}, ${card}`);
+                console.log(`${player.username} (Seer) checked player ${players[index].username} ${card}`);
+                gameLog += `${player.username} (Seer) checked player ${players[index].username} ${card}\n`;
             } catch (collected) {
+                player.send(`>>> Time out. You decided to not select a player.`);
                 console.log(`Time out. ${player.username} (Seer) did not select a player`);
-                player.send(`>>> Time out. You decided to not select.`);
+                gameLog += `Time out. ${player.username} (Seer) did not select a player\n`;
             }
         } else if (seerReaction.emoji.name === emoteMiddleChoice) {
             let t1 = performance.now();
@@ -477,6 +490,8 @@ async function seerTurn(message) {
                 });
 
                 const seerMiddleChoice1 = firstCard.first().emoji.name;
+                let index;
+                let number;
 
                 let t2 = performance.now();
                 let timeUsed = t2 - t1;
@@ -484,18 +499,21 @@ async function seerTurn(message) {
 
                 switch (seerMiddleChoice1) {
                     case emoteKeycaps[0]:
-                        player.send(`>>> The first card is (${deck[deck.length - 3]}). (Timer: ${millisecondsToSeconds(finalTime)}s)`);
-                        console.log(`${player.username} (Seer) picked card 1, ${deck[deck.length - 3]}`);
+                        index = deck.length - 3;
+                        number = 1;
                         break;
                     case emoteKeycaps[1]:
-                        player.send(`>>> The second card is (${deck[deck.length - 2]}). (Timer: ${millisecondsToSeconds(finalTime)}s)`);
-                        console.log(`${player.username} (Seer) picked card 2, ${deck[deck.length - 2]}`);
+                        index = deck.length - 2;
+                        number = 2;
                         break;
                     case emoteKeycaps[2]:
-                        player.send(`>>> The third card is (${deck[deck.length - 1]}). (Timer: ${millisecondsToSeconds(finalTime)}s)`);
-                        console.log(`${player.username} (Seer) picked card 3, ${deck[deck.length - 1]}`);
+                        index = deck.length - 1;
+                        number = 3;
                         break;
                 }
+                player.send(`>>> Card ${number} is (${deck[index]}). (Timer: ${millisecondsToSeconds(finalTime)}s)`);
+                console.log(`${player.username} (Seer) checked card ${number} ${deck[index]} from the middle`);
+                gameLog += `${player.username} (Seer) checked card ${number} ${deck[index]} from the middle\n`;
 
                 try {
                     const secondCard = await twoCardsMessage.awaitReactions(keycapsFilter, {
@@ -506,33 +524,41 @@ async function seerTurn(message) {
 
                     clearTimeout(timeReminder);
                     const seerMiddleChoice2 = secondCard.first().emoji.name;
+                    let index2;
+                    let number2;
 
                     switch (seerMiddleChoice2) {
                         case emoteKeycaps[0]:
-                            player.send(`>>> The first card is (${deck[deck.length - 3]}).`);
-                            console.log(`${player.username} (Seer) picked card 1, ${deck[deck.length - 3]}`);
+                            index2 = deck.length - 3;
+                            number2 = 1;
                             break;
                         case emoteKeycaps[1]:
-                            player.send(`>>> The second card is (${deck[deck.length - 2]}).`);
-                            console.log(`${player.username} (Seer) picked card 2, ${deck[deck.length - 2]}`);
+                            index2 = deck.length - 2;
+                            number2 = 2;
                             break;
                         case emoteKeycaps[2]:
-                            player.send(`>>> The third card is (${deck[deck.length - 1]}).`);
-                            console.log(`${player.username} (Seer) picked card 3, ${deck[deck.length - 1]}`);
+                            index2 = deck.length - 1;
+                            number2 = 3;
                             break;
                     }
+                    player.send(`>>> Card ${number2} is (${deck[index2]}).`);
+                    console.log(`${player.username} (Seer) checked card ${number2} ${deck[index2]} from the middle`);
+                    gameLog += `${player.username} (Seer) checked card ${number2} ${deck[index2]} from the middle\n`;
                 } catch (error) {
-                    console.log(`Time out. ${player.username} (Seer) didn't pick a second card from the middle.`);
                     player.send(`>>> Time out. You decided to not pick a second card from the middle.`);
+                    console.log(`Time out. ${player.username} (Seer) didn't pick a second card from the middle.`);
+                    gameLog += `Time out. ${player.username} (Seer) didn't pick a second card from the middle\n`;
                 }
             } catch (error) {
-                console.log(`Time out. ${player.username} (Seer) didn't pick any cards from the middle`);
                 player.send(`>>> Time out. You decided not to pick any cards from the middle.`);
+                console.log(`Time out. ${player.username} (Seer) didn't pick any cards from the middle`);
+                gameLog += `Time out.(${player.username} (Seer) didn't pick any cards from the middle\n`;
             }
         }
     } catch (error) {
-        console.log(`Time out. Seer (${player.username}) did nothing.`);
         player.send(`>>> Time out. You decided to take no action.`);
+        console.log(`Time out. ${player.username} (Seer) did nothing.`);
+        gameLog += `Time out. ${player.username} (Seer) did nothing\n`;
     }
 }
 
@@ -544,7 +570,8 @@ async function robberTurn(message) {
         halfTimeReminder(player, playerTime / 2);
     }, playerTime / 2);
 
-    let player = players.find((player) => player.role === "Robber");
+    let indexSelf = players.findIndex((player) => player.role === "Robber");
+    let player = players[indexSelf];
     const dm = await player.send(`>>> You may exchange your card another player's card${getEveryone()}and then view that card. (Timer: ${millisecondsToSeconds(playerTime)}s)`);
     for (let i = 0; i < players.length; i++) {
         dm.react(emoteKeycaps[i]);
@@ -559,20 +586,27 @@ async function robberTurn(message) {
 
         clearTimeout(timeReminder);
         const robberPlayerChoice = collected.first().emoji.name;
-        console.log(`${player.username} robbed ${robberPlayerChoice}`);
         let indexChoice = emoteKeycaps.indexOf(robberPlayerChoice);
-        let indexSelf = deck.indexOf(player.role);
-        let card = deck[indexChoice];
+        let cardChoice = deck[indexChoice];
+        let cardSelf = deck[indexSelf];
 
-        //Also exchange the cards in the deck
-        deck[indexChoice] = "Robber";
-        deck[indexSelf] = card;
+        //Only exchange the cards in the deck
+        switchCards(indexChoice, indexSelf);
 
-        player.send(`>>> You have exchanged your card with this player. You are now the (${card}) and ${robberPlayerChoice} ${players[indexChoice].username} is now the (Robber)`);
+        player.send(`>>> You have exchanged your card with this player. You are now the (${cardChoice}) and ${players[indexChoice].username} is now the (${cardSelf})`);
+        console.log(`${player.username} (Robber) robbed ${players[indexChoice].username} (${cardChoice})`);
+        gameLog += `${player.username} (Robber) robbed ${players[indexChoice].username} (${cardSelf})\n`;
     } catch (error) {
-        console.log(`Time out. Robber (${player.username}) did nothing.`);
         player.send(`>>> Time out. You decided to not rob anyone. No exchange.`);
+        console.log(`Time out. ${player.username} (Robber) did nothing.`);
+        gameLog += `Time out. ${player.username} (Robber) did nothing.\n`;
     }
+}
+
+function switchCards(index1, index2) {
+    let temp = deck[index1];
+    deck[index1] = deck[index2];
+    deck[index2] = temp;
 }
 
 async function troublemakerTurn(message) {
@@ -619,19 +653,24 @@ async function troublemakerTurn(message) {
 
             let index1 = emoteKeycaps.indexOf(troublemakerChoiceOne);
             let index2 = emoteKeycaps.indexOf(troublemakerChoiceTwo);
+            let card1 = deck[index1];
+            let card2 = deck[index2];
 
             //Exchange the cards in the deck
-            deck[index1] = players[index1].role;
-            deck[index2] = players[index2].role;
+            switchCards(index1, index2);
 
-            player.send(`>>> Player ${troublemakerChoiceOne} and ${troublemakerChoiceTwo} have been swapped`);
+            player.send(`>>> Player ${players[index1].username} and ${players[index2].username} have been swapped`);
+            console.log(`${player.username} (Troublemaker) swapped ${players[index1].username} (${card1}) and ${players[index2].username} (${card2})`);
+            gameLog += `${player.username} (Troublemaker) swapped ${players[index1].username} (${card1}) and ${players[index2].username} (${card2})\n`;
         } catch (error) {
-            console.log(`Time out. ${player.username} (Troublemaker) did not select a second player.`);
             player.send(`>>> Time out. No swap.`);
+            console.log(`Time out. ${player.username} (Troublemaker) did not select a second player.`);
+            gameLog += `Time out. ${player.username} (Troublemaker) did not select a second player\n`;
         }
     } catch (error) {
-        console.log(`Time out. ${player.username} (Troublemaker) did nothing.`);
         player.send(`>>> Time out. No swap.`);
+        console.log(`Time out. ${player.username} (Troublemaker) did nothing.`);
+        gameLog += `Time out. ${player.username} (Troublemaker) did nothing\n`;
     }
 }
 
@@ -643,7 +682,8 @@ async function drunkTurn(message) {
         halfTimeReminder(player, playerTime / 2);
     }, playerTime / 2);
 
-    let player = players.find((player) => player.role === "Drunk");
+    let indexSelf = players.findIndex((player) => player.role === "Drunk");
+    let player = players[indexSelf];
     const dm = await player.send(
         `>>> You must exchange your card with a card in the middle without knowing the role. If non-selected, a random card will be exchanged. (Timer: ${millisecondsToSeconds(
             playerTime
@@ -662,42 +702,43 @@ async function drunkTurn(message) {
 
         clearTimeout(timeReminder);
         const drunkPlayerChoice = collected.first().emoji.name;
-        let indexChoice;
-        let indexSelf = deck.indexOf(player.role);
+
+        let indexChoice, number, cardChoice;
 
         switch (drunkPlayerChoice) {
             case emoteKeycaps[0]:
-                console.log("Drunk picked card 1");
                 indexChoice = deck.length - 3;
+                number = 1;
                 break;
             case emoteKeycaps[1]:
-                console.log("Drunk picked card 2");
                 indexChoice = deck.length - 2;
+                number = 2;
                 break;
             case emoteKeycaps[2]:
-                console.log("Drunk picked card 3");
                 indexChoice = deck.length - 1;
+                number = 3;
                 break;
         }
 
+        cardChoice = deck[indexChoice];
         //exchange the cards in the deck
-        deck[indexSelf] = deck[indexChoice];
-        deck[indexChoice] = "Drunk";
+        switchCards(indexChoice, indexSelf);
 
-        console.log(`${player.username} is now (${deck[indexSelf]}) and the middle card ${drunkPlayerChoice} is now ${deck[indexChoice]}`);
         player.send(`>>> You have exchanged your card with the card ${drunkPlayerChoice} from the middle.`);
+        console.log(`${player.username} (Drunk) exchanged card ${number} (${cardChoice}) from the middle.`);
+        gameLog += `${player.username} (Drunk) exchanged card ${number} (${cardChoice}) from the middle\n`;
     } catch {
         let randomPick = Math.floor(Math.random() * 3) + 1;
         let indexRandom = deck.length - randomPick;
-        let indexSelf = deck.indexOf(player.role);
+        let number = indexRandom + 1;
+        let cardRandom = deck[indexRandom];
 
         //exchange the cards in the deck
-        deck[indexSelf] = deck[indexRandom];
-        deck[indexRandom] = "Drunk";
+        switchCards(indexRandom, indexSelf);
 
-        console.log(`Time out. ${player.username} (Robber) did nothing. Random card exchanged.`);
-        console.log(`${player.username} is now (${deck[indexSelf]}) and the middle card ${randomPick} is now (${deck[indexRandom]})`);
-        player.send(`>>> Time out. Card ${randomPick} in the middle has been switched with you.`);
+        player.send(`>>> Time out. Card ${number} in the middle has been switched with you.`);
+        console.log(`Time out. ${player.username} (Drunk) did nothing. Exchanged card ${number} (${cardRandom}) from the middle.`);
+        gameLog += `Time out. ${player.username} (Drunk) did nothing. Exchanged card ${number} (${cardRandom}) from the middle\n`;
     }
 }
 
@@ -830,6 +871,7 @@ async function voteTurn(message) {
         }
 
         //TODO need a better log for all actions
+        message.channel.send(`>>> ${gameLog}`);
     }, discussionTime);
 }
 
@@ -1063,6 +1105,7 @@ client.on("message", async (message) => {
         voteOn = false;
         hostId = "";
         players = [];
+        gameLog = "";
         roundTime = playerTime;
         votes = [];
         voted = {};
@@ -1162,6 +1205,8 @@ client.on("messageReactionAdd", (reaction, user) => {
     if (userEmojiReaction === emoteJoin && !user.bot) {
         console.log(`${user.username} was added. id: ${user.id}`);
         players.push(user);
+
+        console.log(players[0]);
     } else if (emoteKeycaps.includes(userEmojiReaction) && !user.bot && voteOn) {
         console.log(`${userEmojiReaction} got selected`);
 
