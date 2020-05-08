@@ -313,6 +313,12 @@ function getBadGuys() {
     return result;
 }
 
+function switchCards(index1, index2) {
+    let temp = deck[index1];
+    deck[index1] = deck[index2];
+    deck[index2] = temp;
+}
+
 function halfTimeReminder(player, time) {
     player.send(`>>> (${millisecondsToSeconds(time)}s remaining).`);
 }
@@ -595,18 +601,12 @@ async function robberTurn(message) {
 
         player.send(`>>> You have exchanged your card with this player. You are now the (${cardChoice}) and ${players[indexChoice].username} is now the (${cardSelf})`);
         console.log(`${player.username} (Robber) robbed ${players[indexChoice].username} (${cardChoice})`);
-        gameLog += `${player.username} (Robber) robbed ${players[indexChoice].username} (${cardSelf})\n`;
+        gameLog += `${player.username} (Robber) robbed ${players[indexChoice].username} (${cardChoice})\n`;
     } catch (error) {
         player.send(`>>> Time out. You decided to not rob anyone. No exchange.`);
         console.log(`Time out. ${player.username} (Robber) did nothing.`);
         gameLog += `Time out. ${player.username} (Robber) did nothing.\n`;
     }
-}
-
-function switchCards(index1, index2) {
-    let temp = deck[index1];
-    deck[index1] = deck[index2];
-    deck[index2] = temp;
 }
 
 async function troublemakerTurn(message) {
@@ -870,7 +870,7 @@ async function voteTurn(message) {
             }
         }
 
-        //TODO need a better log for all actions
+        //TODO: attach vote log
         message.channel.send(`>>> ${gameLog}`);
     }, discussionTime);
 }
@@ -1199,7 +1199,6 @@ client.on("message", async (message) => {
     }
 });
 
-//use hashmap to make sure everyone can only have one vote, 1 for add and 0 for remove
 client.on("messageReactionAdd", (reaction, user) => {
     let userEmojiReaction = reaction.emoji.name;
     if (userEmojiReaction === emoteJoin && !user.bot) {
@@ -1208,11 +1207,11 @@ client.on("messageReactionAdd", (reaction, user) => {
 
         console.log(players[0]);
     } else if (emoteKeycaps.includes(userEmojiReaction) && !user.bot && voteOn) {
-        console.log(`${userEmojiReaction} got selected`);
-
+        //use hashmap to make sure everyone can only have one vote
         let player = players.find((player) => player.username === user.username);
         if (voted[player.username]) return;
 
+        console.log(`${player.username} voted ${userEmojiReaction}`);
         voted[player.username] = true;
         votes[emoteKeycaps.indexOf(userEmojiReaction)] += 1;
         console.log(votes);
@@ -1239,11 +1238,6 @@ client.on("messageReactionRemove", (reaction, user) => {
             1
         );
     }
-    // else if (emoteKeycaps.includes(userEmojiReaction) && !user.bot && voteOn) {
-    //     console.log(`${userEmojiReaction} got selected`);
-    //     votes[emoteKeycaps.indexOf(userEmojiReaction)] -= 1;
-    //     console.log(votes);
-    // }
 });
 
 client.login(token);
