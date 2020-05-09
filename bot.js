@@ -75,6 +75,7 @@ let description = {
 };
 
 let gameOn = false;
+let playersConfirmed = false;
 let voteOn = false;
 let hostId = "";
 
@@ -224,6 +225,21 @@ function reassignRoles() {
     }
 }
 
+function getRolesCheckString() {
+    let select = ``;
+    let difference = players.length + 3 - getRolesCount();
+    if (difference > 0) {
+        //if not enough roles
+        select = `Please select ${difference} more role(s).\n`;
+    } else if (difference < 0) {
+        //if too many roles
+        select = `Please remove ${difference * -1} role(s)\n`;
+    } else {
+        select = `Roles Balanced.\n`;
+    }
+    return select;
+}
+
 function addFinalRolesToGameLog() {
     let finalRoles = "Final Roles:\n";
     players.forEach((player) => {
@@ -360,6 +376,16 @@ function getRolesString() {
         }
     });
     return rolesString;
+}
+
+function getRolesCount() {
+    let rolesCount = 0;
+    let keys = Object.keys(roles);
+
+    keys.forEach((key) => {
+        rolesCount += roles[key];
+    });
+    return rolesCount;
 }
 
 //get all the current roles in the game
@@ -1005,13 +1031,11 @@ async function oneNightUltimateWerewolf(message) {
             time: joinWaitTime, //5 mins of wait time
             errors: ["time"],
         });
-
+        playersConfirmed = true;
         welcomeMessage.delete();
 
         const roleSelection = await message.channel.send(
-            `>>> Please select ${
-                players.length + 3
-            } roles.\nUse '${prefix} roles' to see all the toggled roles.\nEach roles can also be toggled using '${prefix} add/remove role name'.\nThen the host can press the green circle to start the game.`
+            `>>> ${getRolesCheckString()}Use '${prefix} roles' to see all the toggled roles.\nEach roles can also be toggled using '${prefix} add/remove role name'.\nThen the host can press the green circle to start the game.`
         );
 
         roleSelection.react(emoteStart);
@@ -1033,8 +1057,8 @@ async function oneNightUltimateWerewolf(message) {
             time: joinWaitTime, //5 mins of wait time
             errors: ["time"],
         });
-        roleSelection.delete();
 
+        roleSelection.delete();
         message.channel.send(`>>> Game started! Players: ${players}`); //ping all players the game has started
 
         //assigning roles
@@ -1154,6 +1178,7 @@ async function oneNightUltimateWerewolf(message) {
     } catch (error) {
         console.log("Time out. No action after 5mins. Game terminated");
         gameOn = false;
+        playersConfirmed = true;
         players = [];
     }
 }
@@ -1189,6 +1214,7 @@ client.on("message", async (message) => {
         message.channel.send("Game terminated.");
         console.log("game terminated");
         gameOn = false;
+        playersConfirmed = false;
         voteOn = false;
         hostId = "";
         players = [];
@@ -1220,6 +1246,8 @@ client.on("message", async (message) => {
         //const selfDestruct = await message.channel.send(`>>> ${rolesString}Self Destruct in: ${counter}s`);
         //selfDestruct.delete({ timeout: counter * second });
     } else if (command === `add`) {
+        if (!playersConfirmed)
+            return message.channel.send(`>>> A game does not exists. Use ${prefix} play to start a game and press the green circle after confirming the amount of players`);
         if (!args.length) return message.channel.send(`>>> Missing role(s).`);
 
         let addedRoles = "";
@@ -1249,8 +1277,10 @@ client.on("message", async (message) => {
                 addedRoles += `'${role}' has been added\n`;
             });
         }
-        message.channel.send(`>>> ${addedRoles}`);
+        message.channel.send(`>>> ${getRolesCheckString()}${addedRoles}`);
     } else if (command === `remove`) {
+        if (!playersConfirmed)
+            return message.channel.send(`>>> A game does not exists. Use ${prefix} play to start a game and press the green circle after confirming the amount of players`);
         if (!args.length) return message.channel.send(`>>> Missing role(s).`);
 
         let removedRoles = "";
@@ -1273,7 +1303,7 @@ client.on("message", async (message) => {
                 removedRoles += `'${role}' has been removed\n`;
             });
         }
-        message.channel.send(`>>> ${removedRoles}`);
+        message.channel.send(`>>> ${getRolesCheckString()}${removedRoles}`);
     } else if (command === `set`) {
         if (!args.length)
             return message.channel.send(
