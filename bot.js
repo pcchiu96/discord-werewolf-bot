@@ -19,6 +19,7 @@ let emoteRoles = {
     Hunter: "🔫",
     Mason: "👷",
     Insomniac: "🦉",
+    Tanner: "💀",
     Doppelganger: "🤡",
 };
 
@@ -80,11 +81,12 @@ let hostId = "";
 let second = 1000;
 let minute = 60 * second;
 let joinWaitTime = 5 * minute;
-//let playerTime = 30 * second; //time for each player's choice
-let playerTime = 10 * second;
-let roundTime = playerTime; //each role's round time, this increments based on which roles are the in game
-//let discussionTime = 3 * minute;
-let discussionTime = 10 * second;
+let startTime = 10 * second;
+let playerTime = 30 * second; //time for each player's choice
+let roundTime = startTime; //each role's round time, this increments based on which roles are the in game
+let discussionTime = 3 * minute;
+let voteTime = 10 * second;
+let discussionTimeRemaining = discussionTime / second;
 
 let players = [];
 let voted = {};
@@ -133,6 +135,7 @@ let werewolfRoundTimer,
     drunkRoundTimer,
     insomniacRoundTimer,
     doppelgangerRoundTimer,
+    discussionTimer,
     voteTimer;
 
 //turns the roles object into an array
@@ -221,6 +224,14 @@ function reassignRoles() {
     }
 }
 
+function addFinalRolesToGameLog() {
+    let finalRoles = "Final Roles:\n";
+    players.forEach((player) => {
+        finalRoles += `${player.username} ${player.username}\n`;
+    });
+    gameLog += finalRoles;
+}
+
 //resets the exist roles in each players hand
 function refreshExist() {
     resetExist();
@@ -293,6 +304,15 @@ function getRoleDescription(role) {
     return description[role];
 }
 
+function getPlayersRoles() {
+    let roles = "\n";
+    players.forEach((player) => {
+        roles += `${emoteRoles[player.role]} ${player.username} (${player.role})\n`;
+    });
+
+    return roles;
+}
+
 function getGoodGuys() {
     let result = "\nTowns People:\n";
     players.forEach((player) => {
@@ -327,24 +347,69 @@ function millisecondsToSeconds(milliseconds) {
     return (milliseconds / 1000).toFixed(0);
 }
 
-//TODO: replace halfTimerReminder with this count down
-//it edits the message on an interval
-async function countDown(message) {
-    let counter = 4;
-    const m = await message.channel.send(`Count down: ${counter}`);
-    let inter = setInterval(() => {
-        counter -= 2;
-        if (counter === 0) {
-            clearTimeout(inter);
-            m.delete({ timeout: 1000 });
-            console.log(`clear`);
+//get all the roles in the game
+function getRolesString() {
+    let rolesString = "";
+    let keys = Object.keys(roles);
+
+    keys.forEach((key) => {
+        if (roles[key]) {
+            rolesString += `${emoteRoles[key]} ${emoteCheckMark.repeat(roles[key])} (${key})\n`;
+        } else {
+            rolesString += `${emoteRoles[key]} ${emoteCrossMark} (${key})\n`;
         }
-        m.edit(`Count down: ${counter}`);
-    }, 2 * 1000);
+    });
+    return rolesString;
 }
 
-async function werewolfTurn(message) {
-    message.channel.send(`>>> Night falls. Werewolves! Please wake up.`);
+//get all the current roles in the game
+function getCurrentRolesString() {
+    let rolesString = "";
+    let keys = Object.keys(roles);
+
+    keys.forEach((key) => {
+        if (roles[key]) rolesString += `${emoteRoles[key]} ${emoteCheckMark.repeat(roles[key])} (${key})\n`;
+    });
+    return rolesString;
+}
+
+async function countDownRole(message, role, time) {
+    let interval = 5 * second;
+    let decrement = 5;
+    const m = await message.channel.send(`>>> ${role}! Please wake up. (${time}s)`);
+    let inter = setInterval(() => {
+        time -= decrement;
+        //console.log(time);
+        if (time <= 0) {
+            clearTimeout(inter);
+            //m.delete({ timeout: 1000 });
+            //console.log(`clear`);
+            return m.edit(`>>> ${role}, go to sleep.`);
+        }
+        m.edit(`>>> ${role}! Please wake up. (${time}s)`);
+    }, interval);
+}
+
+async function countDown(message, string, time) {
+    let interval = 5 * second;
+    let decrement = 5;
+    const m = await message.channel.send(`${string} ${time}s`);
+    let inter = setInterval(() => {
+        time -= decrement;
+        discussionTimeRemaining -= decrement; //decrement this number for players to check at anytime
+        //console.log(time);
+        if (time <= 0) {
+            clearTimeout(inter);
+            //m.delete({ timeout: 1000 });
+            discussionTimeRemaining = discussionTime / second; //reset the remaining back to numbers
+            //console.log(`clear`);
+            return m.edit(`${string} 0s`);
+        }
+        m.edit(`${string} ${time}s`);
+    }, interval);
+}
+
+async function werewolfTurn() {
     if (!exist.Werewolf) return;
 
     //if there's a lone wolf in the players, ask the lone wolf to pick a card from the middle
@@ -402,8 +467,7 @@ async function werewolfTurn(message) {
     }
 }
 
-function minionTurn(message) {
-    message.channel.send(`>>> Minion! Please wake up`);
+function minionTurn() {
     if (!exist.Minion) return;
 
     let player = players.find((player) => player.role === "Minion");
@@ -412,8 +476,7 @@ function minionTurn(message) {
     return player.send(`>>> There are no Werewolves! Survive to win!`);
 }
 
-function masonTurn(message) {
-    message.channel.send(`>>> Masons! Please wake up`);
+function masonTurn() {
     if (!exist.Mason) return;
 
     players.forEach((player) => {
@@ -421,8 +484,7 @@ function masonTurn(message) {
     });
 }
 
-async function seerTurn(message) {
-    message.channel.send(`>>> Seer! Please wake up.`);
+async function seerTurn() {
     if (!exist.Seer) return;
 
     let timeReminder = setTimeout(() => {
@@ -568,8 +630,7 @@ async function seerTurn(message) {
     }
 }
 
-async function robberTurn(message) {
-    message.channel.send(`>>> Robber! Please wake up`);
+async function robberTurn() {
     if (!exist.Robber) return;
 
     let timeReminder = setTimeout(() => {
@@ -609,8 +670,7 @@ async function robberTurn(message) {
     }
 }
 
-async function troublemakerTurn(message) {
-    message.channel.send(`>>> Troublemaker! Please wake up`);
+async function troublemakerTurn() {
     if (!exist.Troublemaker) return;
 
     let timeReminder = setTimeout(() => {
@@ -674,8 +734,7 @@ async function troublemakerTurn(message) {
     }
 }
 
-async function drunkTurn(message) {
-    message.channel.send(`>>> Drunk! Please wake up`);
+async function drunkTurn() {
     if (!exist.Drunk) return;
 
     let timeReminder = setTimeout(() => {
@@ -742,8 +801,7 @@ async function drunkTurn(message) {
     }
 }
 
-function insomniacTurn(message) {
-    message.channel.send(`>>> Insomniac! Please wake up`);
+function insomniacTurn() {
     if (!exist.Insomniac) return;
 
     let player = players.find((player) => player.role === "Insomniac");
@@ -754,6 +812,7 @@ function insomniacTurn(message) {
 }
 
 //TODO hunter shouldn't be able to shoot himself
+//TODO return a promise so message can be removed from param
 async function hunterTurn(message, player) {
     const hunter = await player.send(`>>> Pick a player you would like to shoot.`);
     for (let i = 0; i < players.length; i++) {
@@ -829,12 +888,11 @@ async function voteTurn(message) {
     refreshExist();
     //reassign all roles based on the deck
     reassignRoles();
+    //add final roles to game log
+    addFinalRolesToGameLog();
 
-    setTimeout(() => {
-        message.channel.send(`>>> (${millisecondsToSeconds(discussionTime / 2)}s remaining).`);
-    }, discussionTime / 2);
-
-    message.channel.send(`>>> Check your dm and vote who you think is the werewolf! (Discusstion time:  ${millisecondsToSeconds(discussionTime)}s)`);
+    countDown(message, `>>> Check your dm and vote who you think is the werewolf! Vote time:`, voteTime / second);
+    //message.channel.send(`>>> Check your dm and vote who you think is the werewolf! (Vote time:  ${millisecondsToSeconds(voteTime)}s)`);
     voteOn = true;
 
     players.forEach(async (player) => {
@@ -847,12 +905,15 @@ async function voteTurn(message) {
     votes = Array(players.length).fill(0);
 
     setTimeout(function () {
-        message.channel.send(`>>> Discussion time is up! The results are...`);
+        message.channel.send(`>>> Vote time is up! The results are...`);
+        voteOn = false;
         let highestVote = Math.max(...votes);
         let occurrence = getOccurrence(highestVote, votes);
         let highestIndex = votes.indexOf(highestVote);
         let votedOut = players[highestIndex];
         console.log(`${votedOut.username} got the highest ${highestVote} vote(s)`);
+
+        //Collect who voted who to game log
 
         //double highest votes
         if (occurrence === 1) {
@@ -870,7 +931,7 @@ async function voteTurn(message) {
                 message.channel.send(`>>> Not enough votes! Good thing there are no bad guys!${getGoodGuys()}win!`);
             }
         }
-    }, discussionTime);
+    }, voteTime);
 }
 
 function twoHighestVote(message, votedOut, secondVotedOut) {
@@ -980,42 +1041,54 @@ async function oneNightUltimateWerewolf(message) {
         assignRoles();
 
         //send roles to each player
-        message.channel.send(`>>> Please check your pm for your role. Game starting in ${millisecondsToSeconds(playerTime)}s`);
+        message.channel.send(`>>> Please check your dm for your role. Game starting in ${millisecondsToSeconds(startTime)}s`);
         players.forEach((player) => {
-            player.send(`>>> Your role is...${player.role}! ${getRoleDescription(player.role)}`);
+            player.send(`>>> ${getCurrentRolesString()}\nYour role is...${player.role}! ${getRoleDescription(player.role)}`);
         });
 
+        let wmm = "";
         //night falls
         if (roles.Werewolf) {
+            wmm += "Werewolf";
             werewolfRoundTimer = setTimeout(function () {
-                werewolfTurn(message);
+                //message.channel.send(`>>> Night falls. Werewolves! Please wake up.`);
+                werewolfTurn();
             }, roundTime);
         }
 
         //minion wakes up to see who the werewolves are
         if (roles.Minion) {
+            wmm = wmm ? (wmm += ", Minion") : "Minion";
             minionRoundTimer = setTimeout(function () {
-                minionTurn(message);
+                //message.channel.send(`>>> Minion! Please wake up.`);
+                minionTurn();
             }, roundTime);
         }
 
         //mason see each other
         if (roles.Mason) {
+            wmm = wmm ? (wmm += ", Mason") : "Mason";
             masonRoundTimer = setTimeout(function () {
-                masonTurn(message);
+                // message.channel.send(`>>> Mason! Please wake up.`);
+                masonTurn();
             }, roundTime);
         }
 
         //Werewolf, Minion and Mason can all go at once
-        if (roles.Werewolf || roles.Minion || roles.Mason) {
-            console.log(`Werewolf, Minion, Mason time: ${millisecondsToSeconds(roundTime)}s`);
+        if (wmm) {
+            setTimeout(function () {
+                countDownRole(message, wmm, playerTime / second);
+            }, roundTime);
+            console.log(`${wmm} time: ${millisecondsToSeconds(roundTime)}s`);
             roundTime += playerTime;
         }
 
         //ask Seer for 2 cards in the middle or a player
         if (roles.Seer) {
             seerRoundTimer = setTimeout(function () {
-                seerTurn(message);
+                countDownRole(message, `Seer`, playerTime / second);
+                //message.channel.send(`>>> Seer! Please wake up.`);
+                seerTurn();
             }, roundTime);
             console.log(`Seer time: ${millisecondsToSeconds(roundTime)}s`);
             roundTime += playerTime;
@@ -1024,7 +1097,9 @@ async function oneNightUltimateWerewolf(message) {
         //robber switch one card with a player and see the role
         if (roles.Robber) {
             robberRoundTimer = setTimeout(function () {
-                robberTurn(message);
+                countDownRole(message, `Robber`, playerTime / second);
+                //message.channel.send(`>>> Robber! Please wake up.`);
+                robberTurn();
             }, roundTime);
             console.log(`Robber time: ${millisecondsToSeconds(roundTime)}s`);
             roundTime += playerTime;
@@ -1033,7 +1108,9 @@ async function oneNightUltimateWerewolf(message) {
         if (roles.Troublemaker) {
             //troublemaker switches two cards without looking at them
             troublemakerRoundTimer = setTimeout(function () {
-                troublemakerTurn(message);
+                countDownRole(message, `Troublemaker`, playerTime / second);
+                //message.channel.send(`>>> Troublemaker! Please wake up.`);
+                troublemakerTurn();
             }, roundTime);
             console.log(`Troublemaker time: ${millisecondsToSeconds(roundTime)}s`);
             roundTime += playerTime;
@@ -1042,7 +1119,9 @@ async function oneNightUltimateWerewolf(message) {
         //drunk switch one card in the middle without looking at them
         if (roles.Drunk) {
             drunkRoundTimer = setTimeout(function () {
-                drunkTurn(message);
+                countDownRole(message, `Drunk`, playerTime / second);
+                //message.channel.send(`>>> Drunk! Please wake up.`);
+                drunkTurn();
             }, roundTime);
             console.log(`Drunk time: ${millisecondsToSeconds(roundTime)}s`);
             roundTime += playerTime;
@@ -1051,11 +1130,21 @@ async function oneNightUltimateWerewolf(message) {
         //insomniac stays awake and knows if he/she got swapped
         if (roles.Insomniac) {
             insomniacRoundTimer = setTimeout(function () {
-                insomniacTurn(message);
+                countDownRole(message, `Insomniac`, playerTime / second);
+                //message.channel.send(`>>> Insomniac! Please wake up.`);
+                insomniacTurn();
             }, roundTime);
             console.log(`Insomniac time: ${millisecondsToSeconds(roundTime)}s`);
             roundTime += playerTime;
         }
+
+        //let everyone discuss
+        discussionTimer = setTimeout(function () {
+            countDown(message, `>>> Everyone! Please wake up. Discussion Time:`, discussionTime / second);
+            //message.channel.send(`>>> Discussion Time: ${millisecondsToSeconds(discussionTime)}s`);
+        }, roundTime);
+        console.log(`Discussion time: ${millisecondsToSeconds(roundTime)}s`);
+        roundTime += discussionTime;
 
         //lastly ask everyone to vote
         voteTimer = setTimeout(function () {
@@ -1104,7 +1193,8 @@ client.on("message", async (message) => {
         hostId = "";
         players = [];
         //gameLog = `Game Log:\n`; //game log does not get erased until new game starts
-        roundTime = playerTime;
+        roundTime = startTime;
+        discussionTimeRemaining = discussionTime / second; //reset the remaining back to numbers
         votes = [];
         voted = {};
         resetExist();
@@ -1117,28 +1207,18 @@ client.on("message", async (message) => {
         clearTimeout(troublemakerRoundTimer);
         clearTimeout(drunkRoundTimer);
         clearTimeout(insomniacRoundTimer);
+        clearTimeout(discussionTimer);
         clearTimeout(voteTimer);
     } else if (command === `playerroles`) {
-        let names = "";
-        players.forEach((player) => (names += `${player.username} (${player.role})\n`));
-        console.log(names);
+        console.log(getPlayersRoles());
     } else if (command === `deck`) {
         console.log(deck);
     } else if (command === `roles`) {
-        let rolesString = "";
-        let keys = Object.keys(roles);
-
-        keys.forEach((key) => {
-            if (roles[key]) {
-                rolesString += `${emoteRoles[key]} ${emoteCheckMark.repeat(roles[key])} (${key})\n`;
-            } else {
-                rolesString += `${emoteRoles[key]} ${emoteCrossMark} (${key})\n`;
-            }
-        });
-
-        let counter = 5;
-        const selfDestruct = await message.channel.send(`>>> ${rolesString}Self Destruct in: ${counter}s`);
-        selfDestruct.delete({ timeout: counter * second });
+        message.channel.send(`>>> ${getRolesString()}`);
+        //this was annoying to deal with so temporary removed
+        //let counter = 5;
+        //const selfDestruct = await message.channel.send(`>>> ${rolesString}Self Destruct in: ${counter}s`);
+        //selfDestruct.delete({ timeout: counter * second });
     } else if (command === `add`) {
         if (!args.length) return message.channel.send(`>>> Missing role(s).`);
 
@@ -1201,18 +1281,28 @@ client.on("message", async (message) => {
             );
         if (!args[1]) return message.channel.send(`>>> Missing timer input in (seconds).`);
 
-        if (args[0] === "timer") {
-            playerTime = parseInt(args[1]) * second;
-            message.channel.send(`>>> Timer for each round is now ${args[1]}s`);
-            console.log(`Timer for each round is now ${playerTime}`);
-        } else if (args[0] === "discussion") {
-            discussionTime = parseInt(args[1]) * second;
-            message.channel.send(`>>> Timer for each round is now ${args[1]}s`);
-            console.log(`Timer for discussion round is now ${discussionTime}`);
+        switch (args[0]) {
+            case "timer":
+                playerTime = parseInt(args[1]) * second;
+                message.channel.send(`>>> Timer for each round is now ${args[1]}s`);
+                console.log(`Timer for each round is now ${playerTime}`);
+                break;
+            case "discussion":
+                discussionTime = parseInt(args[1]) * second;
+                message.channel.send(`>>> Timer for discussion is now ${args[1]}s`);
+                console.log(`Timer for discussion round is now ${discussionTime}`);
+                break;
+            case "vote":
+                voteTime = parseInt(args[1]) * second;
+                message.channel.send(`>>> Timer for vote is now ${args[1]}s`);
+                console.log(`Timer for vote round is now ${voteTime}`);
+                break;
         }
     } else if (command === "log") {
         if (gameOn) return message.channel.send(`>>> A game still exists. Please use '${prefix} stop' to terminate the game before using this command.`);
         message.channel.send(`>>> ${gameLog === `Game Log:\n` ? "No Game Log" : gameLog}`);
+    } else if (command === "time") {
+        message.channel.send(`>>> Time remaining ${discussionTimeRemaining}s`);
     }
 });
 
