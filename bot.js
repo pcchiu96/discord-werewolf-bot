@@ -76,6 +76,7 @@ let description = {
 
 let gameOn = false;
 let playersConfirmed = false;
+let gameActive = false;
 let voteOn = false;
 let hostId = "";
 
@@ -241,7 +242,7 @@ function getRolesCheckString() {
 }
 
 function addFinalRolesToGameLog() {
-    let finalRoles = "Final Roles:\n";
+    let finalRoles = "\nFinal Roles:\n";
     players.forEach((player) => {
         finalRoles += `${player.username} ${player.username}\n`;
     });
@@ -841,7 +842,9 @@ function insomniacTurn() {
 //TODO return a promise so message can be removed from param
 async function hunterTurn(message, player) {
     const hunter = await player.send(`>>> Pick a player you would like to shoot.`);
+    let indexSelf = players.findIndex((player) => player.role === "Hunter");
     for (let i = 0; i < players.length; i++) {
+        if (i === indexSelf) return;
         hunter.react(emoteKeycaps[i]);
     }
 
@@ -1057,6 +1060,7 @@ async function oneNightUltimateWerewolf(message) {
             time: joinWaitTime, //5 mins of wait time
             errors: ["time"],
         });
+        gameActive = true;
 
         roleSelection.delete();
         message.channel.send(`>>> Game started! Players: ${players}`); //ping all players the game has started
@@ -1176,9 +1180,10 @@ async function oneNightUltimateWerewolf(message) {
         }, roundTime);
         console.log(`Vote time: ${millisecondsToSeconds(roundTime)}s`);
     } catch (error) {
-        console.log("Time out. No action after 5mins. Game terminated");
+        console.log(`Time out. No action after ${joinWaitTime}s. Game terminated`);
         gameOn = false;
         playersConfirmed = true;
+        gameActive = false;
         players = [];
     }
 }
@@ -1215,6 +1220,7 @@ client.on("message", async (message) => {
         console.log("game terminated");
         gameOn = false;
         playersConfirmed = false;
+        gameActive = false;
         voteOn = false;
         hostId = "";
         players = [];
