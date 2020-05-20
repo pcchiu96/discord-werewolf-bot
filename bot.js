@@ -357,7 +357,7 @@ function getGoodGuys() {
     let result = "\nTowns People:\n";
     players.forEach((player) => {
         if (!badGuys.includes(player.role)) {
-            result += `${player.username} (${player.role})\n`;
+            result += `${player.username}\n`;
         }
     });
     return result;
@@ -367,7 +367,7 @@ function getBadGuys() {
     let result = "\nEvil:\n";
     players.forEach((player) => {
         if (badGuys.includes(player.role)) {
-            result += `${player.username} (${player.role})\n`;
+            result += `${player.username}\n`;
         }
     });
     return result;
