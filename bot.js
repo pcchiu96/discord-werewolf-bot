@@ -192,6 +192,8 @@ function assignRoles() {
 
     for (let i = 0; i < players.length; i++) {
         players[i].role = deck[i];
+        players[i].index = i;
+        players[i].votedBy = "";
         if (deck[i] === "Werewolf") {
             wolfCount += 1;
             exist.Werewolf = true;
@@ -241,12 +243,20 @@ function getRolesCheckString() {
     return select;
 }
 
-function addFinalRolesToGameLog() {
+function getFinalRolesString() {
     let finalRoles = "\nFinal Roles:\n";
     players.forEach((player) => {
-        finalRoles += `${player.username} ${player.username}\n`;
+        finalRoles += `${player.username} (${player.role})\n`;
     });
-    gameLog += finalRoles;
+    return finalRoles;
+}
+
+function getVoteResultString() {
+    let voteResult = "\nVotes:\n";
+    players.forEach((player) => {
+        voteResult += `${player.username}: ${player.votedBy}\n`;
+    });
+    return voteResult;
 }
 
 //resets the exist roles in each players hand
@@ -317,6 +327,20 @@ function getEveryone() {
     return everyone;
 }
 
+function getEveryoneHunter() {
+    let everyone = "\n";
+    let count = 0;
+    players.forEach((player) => {
+        if (player.role !== "Hunter") {
+            everyone += `${emoteKeycaps[count]} ${player.username}\n`;
+            count += 1;
+        } else {
+            count += 1;
+        }
+    });
+    return everyone;
+}
+
 function getRoleDescription(role) {
     return description[role];
 }
@@ -326,7 +350,6 @@ function getPlayersRoles() {
     players.forEach((player) => {
         roles += `${emoteRoles[player.role]} ${player.username} (${player.role})\n`;
     });
-
     return roles;
 }
 
@@ -838,10 +861,9 @@ function insomniacTurn() {
     player.send(`>>> You stayed up the entire night. ${player.role !== newRole ? `You have been swapped! Your role is now ${newRole}` : `You are still ${player.role}`}`);
 }
 
-//TODO hunter shouldn't be able to shoot himself
 //TODO return a promise so message can be removed from param
 async function hunterTurn(message, player) {
-    const hunter = await player.send(`>>> Pick a player you would like to shoot.`);
+    const hunter = await player.send(`>>> Pick a player you would like to shoot${getEveryoneHunter()}.`);
     let indexSelf = players.findIndex((player) => player.role === "Hunter");
     for (let i = 0; i < players.length; i++) {
         if (i === indexSelf) return;
@@ -918,7 +940,7 @@ async function voteTurn(message) {
     //reassign all roles based on the deck
     reassignRoles();
     //add final roles to game log
-    addFinalRolesToGameLog();
+    gameLog += getFinalRolesString();
 
     countDown(message, `>>> Check your dm and vote who you think is the werewolf! Vote time:`, voteTime / second);
     //message.channel.send(`>>> Check your dm and vote who you think is the werewolf! (Vote time:  ${millisecondsToSeconds(voteTime)}s)`);
@@ -933,7 +955,7 @@ async function voteTurn(message) {
 
     votes = Array(players.length).fill(0);
 
-    setTimeout(function () {
+    setTimeout(async function () {
         message.channel.send(`>>> Vote time is up! The results are...`);
         voteOn = false;
         let highestVote = Math.max(...votes);
@@ -943,6 +965,7 @@ async function voteTurn(message) {
         console.log(`${votedOut.username} got the highest ${highestVote} vote(s)`);
 
         //Collect who voted who to game log
+        gameLog += getVoteResultString();
 
         //double highest votes
         if (occurrence === 1) {
@@ -960,63 +983,65 @@ async function voteTurn(message) {
                 message.channel.send(`>>> Not enough votes! Good thing there are no bad guys!${getGoodGuys()}win!`);
             }
         }
+
+        await message.channel.send(`>>> ${getFinalRolesString()}`);
     }, voteTime);
 }
 
-function twoHighestVote(message, votedOut, secondVotedOut) {
+async function twoHighestVote(message, votedOut, secondVotedOut) {
     //tanner overrides all other roles
     if (votedOut.role === "Tanner" || secondVotedOut.role === "Tanner") {
-        message.channel.send(`>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}. Only Tanner win!`);
+        await message.channel.send(`>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}. Only Tanner win!`);
     } else if (votedOut.role === "Werewolf" || secondVotedOut.role === "Werewolf") {
-        message.channel.send(`>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}${getGoodGuys()}win!`);
+        await message.channel.send(`>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}${getGoodGuys()}win!`);
     } else if (!exist.Werewolf && (votedOut.role === "Minion" || secondVotedOut.role === "Minion")) {
         //checks only minion before hunter
         //minion becomes werewolf if there are no werewolves in play
-        message.channel.send(
+        await message.channel.send(
             `>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}. And there are no Werewolves!${getGoodGuys()}win!`
         );
     } else if (votedOut.role === "Hunter" || secondVotedOut.role === "Hunter") {
         let player = players.find((player) => player.role === "Hunter");
-        message.channel.send(
+        await message.channel.send(
             `>>> ${votedOut.username} and ${secondVotedOut.username} got the highest votes. But ${player.username} is Hunter, pick a player that you would like to shoot.`
         );
         hunterTurn(message, votedOut);
     } else if (votedOut.role === "Minion" || secondVotedOut.role === "Minion") {
-        message.channel.send(`>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}${getBadGuys()}win!`);
+        await message.channel.send(`>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}${getBadGuys()}win!`);
     } else {
         if (!exist.Werewolf) {
-            message.channel.send(
+            await message.channel.send(
                 `>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}. There are no werewolves!${getGoodGuys()}lose!`
             );
         } else {
-            message.channel.send(`>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}.${getBadGuys()}win!`);
+            await message.channel.send(`>>> ${votedOut.username} is ${votedOut.role} and ${secondVotedOut.username} is ${secondVotedOut.role}.${getBadGuys()}win!`);
         }
     }
 }
 
-function oneHighestVote(message, votedOut) {
+async function oneHighestVote(message, votedOut) {
     //single highest vote
     if (votedOut.role === "Tanner") {
         //tanner only wins if he's voted out
-        message.channel.send(`>>> ${votedOut.username} is a Tanner! Only ${votedOut.username} wins!`);
+        await message.channel.send(`>>> ${votedOut.username} is a Tanner! Only ${votedOut.username} wins!`);
     } else if (votedOut.role === "Werewolf") {
-        message.channel.send(`>>> ${votedOut.username} is a Werewolf!${getGoodGuys()}win!`);
+        await message.channel.send(`>>> ${votedOut.username} is a Werewolf!${getGoodGuys()}win!`);
     } else if (votedOut.role === "Hunter") {
-        message.channel.send(`>>> ${votedOut.username} is a Hunter! Pick a player you would like to shoot.`);
+        await message.channel.send(`>>> ${votedOut.username} is a Hunter! Pick a player you would like to shoot.`);
         hunterTurn(message, votedOut);
     } else if (votedOut.role === "Minion") {
         //minion becomes werewolf if there are no werewolves in play
         if (!exist.Werewolf) {
-            message.channel.send(`>>> ${votedOut.username} is the only Minion! And there are no Werewolves!${getGoodGuys()}win!`);
+            await message.channel.send(`>>> ${votedOut.username} is the only Minion! And there are no Werewolves!${getGoodGuys()}win!`);
         } else {
-            message.channel.send(`>>> ${votedOut.username} is not a Werewolf!${getBadGuys()}win!`);
+            await message.channel.send(`>>> ${votedOut.username} is not a Werewolf!${getBadGuys()}win!`);
         }
     } else {
         //any other roles
         if (!exist.Werewolf) {
-            message.channel.send(`>>> ${votedOut.username} is not a Werewolf. There are no werewolves!${getGoodGuys()}lose!`);
+            await message.channel.send(`>>> ${votedOut.username} is not a Werewolf. There are no werewolves!${getGoodGuys()}lose!`);
         } else {
-            message.channel.send(`>>> ${votedOut.username} is not a Werewolf.${getBadGuys()}win!`);
+            await message.channel.send(`>>> ${votedOut.username} is not a Werewolf.${getBadGuys()}win!`);
         }
     }
 }
@@ -1169,7 +1194,6 @@ async function oneNightUltimateWerewolf(message) {
         //let everyone discuss
         discussionTimer = setTimeout(function () {
             countDown(message, `>>> Everyone! Please wake up. Discussion Time:`, discussionTime / second);
-            //message.channel.send(`>>> Discussion Time: ${millisecondsToSeconds(discussionTime)}s`);
         }, roundTime);
         console.log(`Discussion time: ${millisecondsToSeconds(roundTime)}s`);
         roundTime += discussionTime;
@@ -1181,11 +1205,35 @@ async function oneNightUltimateWerewolf(message) {
         console.log(`Vote time: ${millisecondsToSeconds(roundTime)}s`);
     } catch (error) {
         console.log(`Time out. No action after ${joinWaitTime}s. Game terminated`);
-        gameOn = false;
-        playersConfirmed = true;
-        gameActive = false;
-        players = [];
+        terminateGame();
     }
+}
+
+function terminateGame() {
+    gameOn = false;
+    playersConfirmed = false;
+    gameActive = false;
+    voteOn = false;
+    hostId = "";
+    players = [];
+    //gameLog = `Game Log:\n`; //game log does not get erased until new game starts
+    roundTime = startTime;
+    discussionTimeRemaining = discussionTime / second; //reset the remaining back to numbers
+    votes = [];
+    voted = {};
+    resetExist();
+    clearTimeout(werewolfRoundTimer);
+    clearTimeout(seerRoundTimer);
+    clearTimeout(minionRoundTimer);
+    clearTimeout(masonsRoundTimer);
+    clearTimeout(seerRoundTimer);
+    clearTimeout(robberRoundTimer);
+    clearTimeout(troublemakerRoundTimer);
+    clearTimeout(drunkRoundTimer);
+    clearTimeout(insomniacRoundTimer);
+    clearTimeout(discussionTimer);
+    clearTimeout(voteTimer);
+    console.log("game terminated");
 }
 
 client.on("message", async (message) => {
@@ -1215,32 +1263,8 @@ client.on("message", async (message) => {
             message.channel.send("No players.");
         }
     } else if (command === `stop`) {
-        //TODO: add a confirm reaction check
         message.channel.send("Game terminated.");
-        console.log("game terminated");
-        gameOn = false;
-        playersConfirmed = false;
-        gameActive = false;
-        voteOn = false;
-        hostId = "";
-        players = [];
-        //gameLog = `Game Log:\n`; //game log does not get erased until new game starts
-        roundTime = startTime;
-        discussionTimeRemaining = discussionTime / second; //reset the remaining back to numbers
-        votes = [];
-        voted = {};
-        resetExist();
-        clearTimeout(werewolfRoundTimer);
-        clearTimeout(seerRoundTimer);
-        clearTimeout(minionRoundTimer);
-        clearTimeout(masonsRoundTimer);
-        clearTimeout(seerRoundTimer);
-        clearTimeout(robberRoundTimer);
-        clearTimeout(troublemakerRoundTimer);
-        clearTimeout(drunkRoundTimer);
-        clearTimeout(insomniacRoundTimer);
-        clearTimeout(discussionTimer);
-        clearTimeout(voteTimer);
+        terminateGame();
     } else if (command === `playerroles`) {
         console.log(getPlayersRoles());
     } else if (command === `deck`) {
@@ -1254,6 +1278,7 @@ client.on("message", async (message) => {
     } else if (command === `add`) {
         if (!playersConfirmed)
             return message.channel.send(`>>> A game does not exists. Use ${prefix} play to start a game and press the green circle after confirming the amount of players`);
+        if (gameActive) return message.channel.send(`>>> Cannot add role(s) when game is active. Use ${prefix} stop to terminate current game.`);
         if (!args.length) return message.channel.send(`>>> Missing role(s).`);
 
         let addedRoles = "";
@@ -1287,6 +1312,7 @@ client.on("message", async (message) => {
     } else if (command === `remove`) {
         if (!playersConfirmed)
             return message.channel.send(`>>> A game does not exists. Use ${prefix} play to start a game and press the green circle after confirming the amount of players`);
+        if (gameActive) return message.channel.send(`>>> Cannot remove role(s) when game is active. Use ${prefix} stop to terminate current game.`);
         if (!args.length) return message.channel.send(`>>> Missing role(s).`);
 
         let removedRoles = "";
@@ -1354,7 +1380,11 @@ client.on("messageReactionAdd", (reaction, user) => {
         let player = players.find((player) => player.username === user.username);
         if (voted[player.username]) return;
 
-        console.log(`${player.username} voted ${userEmojiReaction}`);
+        let votedPlayer = players.find((player) => player.index === emoteKeycaps.indexOf(userEmojiReaction));
+        votedPlayer.votedBy += `${player.username} `;
+
+        console.log(`${player.username} voted ${votedPlayer.username}`);
+
         voted[player.username] = true;
         votes[emoteKeycaps.indexOf(userEmojiReaction)] += 1;
         console.log(votes);
