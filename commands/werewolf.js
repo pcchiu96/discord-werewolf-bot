@@ -1,5 +1,6 @@
 const Discord = require("discord.js");
 const { prefix } = require("../../config.json");
+const { performance } = require("perf_hooks");
 let client = new Discord.Client();
 
 let emoteJoin = "🎮";
@@ -527,12 +528,13 @@ function masonTurn() {
 async function seerTurn() {
     if (!exist.Seer) return;
 
+    let t0 = performance.now(); //start time to keep tract of player's choice time
+    let player = players.find((player) => player.role === "Seer");
+
     let timeReminder = setTimeout(() => {
         halfTimeReminder(player, playerTime / 2);
     }, playerTime / 2);
 
-    let t0 = performance.now(); //start time to keep tract of player's choice time
-    let player = players.find((player) => player.role === "Seer");
     const dm = await player.send(
         `>>> You may look at another player's card (${emotePlayerChoice}) or 2 cards from the middle (${emoteMiddleChoice}). (Timer: ${millisecondsToSeconds(playerTime)}s)`
     );
@@ -673,12 +675,13 @@ async function seerTurn() {
 async function robberTurn() {
     if (!exist.Robber) return;
 
+    let indexSelf = players.findIndex((player) => player.role === "Robber");
+    let player = players[indexSelf];
+
     let timeReminder = setTimeout(() => {
         halfTimeReminder(player, playerTime / 2);
     }, playerTime / 2);
 
-    let indexSelf = players.findIndex((player) => player.role === "Robber");
-    let player = players[indexSelf];
     const dm = await player.send(`>>> You may exchange your card another player's card${getEveryone()}and then view that card. (Timer: ${millisecondsToSeconds(playerTime)}s)`);
     for (let i = 0; i < players.length; i++) {
         dm.react(emoteKeycaps[i]);
@@ -713,12 +716,13 @@ async function robberTurn() {
 async function troublemakerTurn() {
     if (!exist.Troublemaker) return;
 
+    let t0 = performance.now();
+    let player = players.find((player) => player.role === "Troublemaker");
+
     let timeReminder = setTimeout(() => {
         halfTimeReminder(player, playerTime / 2);
     }, playerTime / 2);
 
-    let t0 = performance.now();
-    let player = players.find((player) => player.role === "Troublemaker");
     const dm = await player.send(`>>> You may swap cards between two players${getEveryone()}(Timer: ${millisecondsToSeconds(playerTime)}s)`);
     for (let i = 0; i < players.length; i++) {
         dm.react(emoteKeycaps[i]);
@@ -777,12 +781,13 @@ async function troublemakerTurn() {
 async function drunkTurn() {
     if (!exist.Drunk) return;
 
+    let indexSelf = players.findIndex((player) => player.role === "Drunk");
+    let player = players[indexSelf];
+
     let timeReminder = setTimeout(() => {
         halfTimeReminder(player, playerTime / 2);
     }, playerTime / 2);
 
-    let indexSelf = players.findIndex((player) => player.role === "Drunk");
-    let player = players[indexSelf];
     const dm = await player.send(
         `>>> You must exchange your card with a card in the middle without knowing the role. If non-selected, a random card will be exchanged. (Timer: ${millisecondsToSeconds(
             playerTime
