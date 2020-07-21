@@ -80,6 +80,7 @@ let game = {
             count: 0,
             inGame: 0,
             description: "You get to look at a player's card and become that role for the rest of the game.",
+            role: "",
             perform() {
                 return doppelganger();
             },
@@ -217,6 +218,7 @@ module.exports = {
 
     stop(message) {
         game.on = false;
+        game.roles.Doppelganger.role = "";
         game.timer.cancel();
         clearTimeout(game.timer);
 
@@ -242,6 +244,38 @@ module.exports = {
         console.log("Game terminated.");
     },
 
+    again(message) {
+        if (game.on && game.players.length) return message.channel.send("Game is in session.");
+        if (!game.on && !game.players.length) return message.channel.send("No previous history.");
+
+        game.on = false;
+        game.roles.Doppelganger.role = "";
+        game.timer.cancel();
+        clearTimeout(game.timer);
+
+        //clear all inGame roles to 0
+        let entries = Object.keys(game.roles);
+        for (let i = 0; i < entries.length; i++) {
+            let roleName = entries[i];
+            game.roles[roleName].inGame = 0;
+        }
+
+        //clear all emoji collectors
+        for (let i = 0; i < game.collectors.length; i++) {
+            game.collectors[i].stop();
+        }
+
+        //reset all arrays except joined players
+        game.deck = [];
+        game.roleTimer = [];
+        game.collectors = [];
+
+        message.channel.send("Play again.");
+        console.log("Play again.");
+
+        startGame(message);
+    },
+
     skip() {
         game.timer.cancel();
     },
@@ -260,7 +294,7 @@ function timeout(ms) {
 
     promise.cancel = function () {
         reject("Skipped");
-        clearTimeout(timeout);
+        clearTimeout(promise.timeout);
     };
 
     return promise;
@@ -467,9 +501,9 @@ function robber(player) {
         collector.on("collect", (reaction, user) => {
             let numberIndex = game.emojis.numbers.findIndex((emoji) => emoji === reaction.emoji.name);
             let selectedPlayer = game.players[numberIndex - 1];
-            player.send(`You robbed (${selectedPlayer.username}). This player is ${selectedPlayer.role}.`);
+            player.send(`You robbed (${selectedPlayer.username}). This player is ${game.deck[numberIndex - 1]}.`);
             swapPlayerCards(player, selectedPlayer);
-            resolve(`Robber (${player.username}) robbed (${selectedPlayer.username} ${selectedPlayer.role}).`);
+            resolve(`Robber (${player.username}) robbed (${selectedPlayer.username} ${game.deck[numberIndex - 1]}).`);
         });
 
         collector.on("end", () => {
@@ -598,8 +632,8 @@ function doppelganger() {
                     let newRole = game.deck[cardIndex];
 
                     player.role = newRole;
-                    // game.deck[i] = newRole;
                     game.roles[newRole].inGame += 1;
+                    game.roles.Doppelganger.role = newRole;
 
                     player.send(`Your new role is ${player.role}.`);
 
@@ -615,8 +649,8 @@ function doppelganger() {
                         let newRole = game.deck[cardIndex];
 
                         player.role = newRole;
-                        // game.deck[i] = newRole;
                         game.roles[newRole].inGame += 1;
+                        game.roles.Doppelganger.role = newRole;
 
                         player.send(`Your new role is ${player.role}.`);
                         resolve(`Doppelganger (${player.username}) did not select. Card ${game.emojis.numbers[cardIndex + 1]} was randomly chosen.`);
@@ -627,24 +661,49 @@ function doppelganger() {
     });
 }
 
-function hunter(message, voteResult) {
-    let playerRole = voteResult.role;
+async function hunter(message, player) {
+    message.channel.send(`${player.username} is the Hunter. Before dying, this player gets to shoot one player and completely overrides all previous votes.`);
+    let msg = await player.send(`Select a player. ${getPlayersString()}`);
+    for (let i = 0; i < game.players.length; i++) {
+        msg.react(game.emojis.numbers[i + 1]);
+    }
 
-    message.channel.send(`${voteResult.username} is the Hunter and voted ${voteResult.vote ? voteResult.vote : "no one"}.`);
-    if (playerRole === "Tanner") {
-        message.channel.send(`${voteResult.username} wins!`);
-    } else if (playerRole === "Werewolf" || (playerRole === "Minion" && !game.roles.Werewolf.inGame)) {
-        message.channel.send(`Evil team wins!`);
-    } else if (playerRole === "Hunter") {
-        //do not recursion call if a player voted him/herself
-        if (voteResult.username !== voteResult.vote.username) {
-            hunter(message, voteResult);
+    const filter = (reaction, user) => game.emojis.numbers.includes(reaction.emoji.name) && !user.bot;
+    const options = { max: 1, time: game.timers.role };
+    const collector = msg.createReactionCollector(filter, options);
+    game.collectors.push(collector);
+
+    collector.on("collect", (reaction, user) => {
+        madeAnAction = true;
+        let playerIndex = game.emojis.numbers.findIndex((emoji) => emoji === reaction.emoji.name) - 1;
+        let selectedPlayer = game.players[playerIndex];
+        let playerRole = selectedPlayer.role;
+        if (playerRole === "Doppelganger") playerRole = game.roles.Doppelganger.role;
+        console.log(`${player.username} chose ${selectedPlayer.username}.`);
+
+        if (playerRole === "Tanner") {
+            message.channel.send(`${selectedPlayer.username} wins!`);
+        } else if (playerRole === "Werewolf" || (playerRole === "Minion" && !game.roles.Werewolf.inGame)) {
+            message.channel.send(`Village team wins!`);
+        } else if (playerRole === "Hunter") {
+            //do not recursion call if a player shoots him/herself
+            if (player.username !== selectedPlayer.username) {
+                hunter(message, selectedPlayer);
+            } else {
+                console.log(1);
+                message.channel.send(`Evil team wins!`);
+            }
         } else {
+            console.log(2);
             message.channel.send(`Evil team wins!`);
         }
-    } else {
-        message.channel.send(`Evil team wins!`);
-    }
+    });
+
+    collector.on("end", () => {
+        if (!madeAnAction) {
+            message.channel.send(`Evil team wins!`);
+        }
+    });
 }
 
 async function startGame(message) {
@@ -700,11 +759,12 @@ async function startGame(message) {
             message.channel.send(`${voteResult.username} received the most votes.`);
 
             let playerRole = voteResult.role;
+            if (playerRole === "Doppelganger") playerRole = game.roles.Doppelganger.role;
 
             if (playerRole === "Tanner") {
                 message.channel.send(`${voteResult.username} wins!`);
             } else if (playerRole === "Werewolf" || (playerRole === "Minion" && !game.roles.Werewolf.inGame)) {
-                message.channel.send(`Evil team wins!`);
+                message.channel.send(`Village team wins!`);
             } else if (playerRole === "Hunter") {
                 hunter(message, voteResult);
             } else {
@@ -716,6 +776,8 @@ async function startGame(message) {
             return message.channel.send(`No one got voted out. Village team wins!`);
         }
     }
+
+    game.on = false;
 }
 
 function discussion(message) {
@@ -745,12 +807,6 @@ function vote(message) {
                     // voteMsg.remove(reaction.emoji);
                 } else {
                     votedPlayers[player.username] = true;
-
-                    if (player.role === "Hunter") {
-                        let playerIndexHunterVoted = game.emojis.numbers.findIndex((emoji) => emoji === reaction.emoji.name) - 1;
-                        let playerHunterVoted = game.players[playerIndexHunterVoted];
-                        player.vote = playerHunterVoted;
-                    }
                 }
 
                 let votedCount = Object.values(votedPlayers).length;
