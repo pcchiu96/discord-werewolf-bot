@@ -108,7 +108,6 @@ let game = {
         numbers: ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"],
     },
     timers: { role: 20000, discussion: 120000, vote: 10000 },
-    roleTimer: [], //can be removed
     collectors: [],
     order: ["Werewolf", "Minion", "Mason", "Seer", "Robber", "Troublemaker", "Drunk", "Insomniac"],
     on: false,
@@ -118,6 +117,9 @@ module.exports = {
     name: "One Night Ultimate Werewolf",
     description: "One Night Ultimate Werewolf using discord bot",
     async werewolf(message, args) {
+        console.log(gameCondition());
+        if (game.players.length) return message.channel.send("A game is already in session.");
+
         const welcomeMsg = await message.channel.send("Welcome to One Night Ultimate Werewolf. Press the controller icon to join or type 'squish join'.");
         await welcomeMsg.react(game.emojis.join);
         await welcomeMsg.react(game.emojis.start);
@@ -155,6 +157,8 @@ module.exports = {
     },
 
     join(message) {
+        if (game.on) return message.channel.send("Cannot join when game is in session.");
+
         if (game.players.findIndex((i) => i.id === message.author.id) === -1) {
             game.players.push(message.author);
             console.log(`${message.author.username} joined.`);
@@ -162,6 +166,8 @@ module.exports = {
     },
 
     leave(message) {
+        if (game.on) return message.channel.send("Cannot leave when game is in session.");
+
         let userIndex = game.players.findIndex((i) => i.id === message.author.id);
         if (userIndex !== -1) {
             game.players.splice(userIndex, 1);
@@ -174,9 +180,9 @@ module.exports = {
         message.channel.send(game.players);
     },
 
-    deck(message) {
-        message.channel.send(game.deck);
-    },
+    // deck(message) {
+    //     message.channel.send(game.deck);
+    // },
 
     roles(message) {
         let rolesString = "";
@@ -195,6 +201,8 @@ module.exports = {
     },
 
     add(message, args) {
+        if (game.on) return message.channel.send("Cannot change roles when game is in session.");
+
         for (let i = 0; i < args.length; i++) {
             let roleName = args[i][0].toUpperCase() + args[i].slice(1).toLowerCase(); //converting to proper name
             if (game.roles[roleName]) {
@@ -206,6 +214,8 @@ module.exports = {
     },
 
     remove(message, args) {
+        if (game.on) return message.channel.send("Cannot change roles when game is in session.");
+
         for (let i = 0; i < args.length; i++) {
             let roleName = args[i][0].toUpperCase() + args[i].slice(1).toLowerCase(); //converting to proper name
             if (game.roles[roleName].count > 0) {
@@ -217,6 +227,8 @@ module.exports = {
     },
 
     stop(message) {
+        if (!game.on && !game.players.length) return message.channel.send("No game in session.");
+
         game.on = false;
         game.roles.Doppelganger.role = "";
         game.timer.cancel();
@@ -237,16 +249,16 @@ module.exports = {
         //reset all arrays
         game.players = [];
         game.deck = [];
-        game.roleTimer = [];
         game.collectors = [];
 
+        console.log(gameCondition());
         message.channel.send("Game Terminated.");
-        console.log("Game terminated.");
+        console.log("Stop. Game terminated.");
     },
 
     again(message) {
         if (game.on && game.players.length) return message.channel.send("Game is in session.");
-        if (!game.on && !game.players.length) return message.channel.send("No previous history.");
+        if (!game.on && !game.players.length) return message.channel.send("No previous players history.");
 
         game.on = false;
         game.roles.Doppelganger.role = "";
@@ -267,12 +279,9 @@ module.exports = {
 
         //reset all arrays except joined players
         game.deck = [];
-        game.roleTimer = [];
         game.collectors = [];
 
-        message.channel.send("Play again.");
         console.log("Play again.");
-
         startGame(message);
     },
 
@@ -280,6 +289,14 @@ module.exports = {
         game.timer.cancel();
     },
 };
+
+function gameCondition() {
+    let gameOn = game.on;
+    let players = game.players.map((player) => player.username);
+    let deck = game.deck;
+    let roles = getPlayersRoles();
+    return { gameOn, players, deck, roles };
+}
 
 function timeout(ms) {
     let resolve, reject;
@@ -298,26 +315,6 @@ function timeout(ms) {
     };
 
     return promise;
-}
-
-function findPlayersWithRole(role) {
-    let players = [];
-    for (let i = 0; i < game.players.length; i++) {
-        if (game.players[i].role === role) {
-            players.push(game.players[i]);
-        }
-    }
-    return players;
-}
-
-function findOtherPlayersWithRole(role, player) {
-    let players = [];
-    for (let i = 0; i < game.players.length; i++) {
-        if (game.players[i].role === role && game.players[i].username !== player.username) {
-            players.push(game.players[i]);
-        }
-    }
-    return players;
 }
 
 function werewolf() {
@@ -661,10 +658,11 @@ function doppelganger() {
     });
 }
 
-async function hunter(message, player) {
+async function hunter(message, player, alreadyHunter = "") {
     message.channel.send(`${player.username} is the Hunter. Before dying, this player gets to shoot one player and completely overrides all previous votes.`);
     let msg = await player.send(`Select a player. ${getPlayersString()}`);
     for (let i = 0; i < game.players.length; i++) {
+        if (alreadyHunter === i + 1) continue; //skip the previous hunter
         msg.react(game.emojis.numbers[i + 1]);
     }
 
@@ -688,7 +686,7 @@ async function hunter(message, player) {
         } else if (playerRole === "Hunter") {
             //do not recursion call if a player shoots him/herself
             if (player.username !== selectedPlayer.username) {
-                hunter(message, selectedPlayer);
+                hunter(message, selectedPlayer, playerIndex);
             } else {
                 console.log(1);
                 message.channel.send(`Evil team wins!`);
@@ -709,11 +707,9 @@ async function hunter(message, player) {
 async function startGame(message) {
     game.on = true;
     createDeck();
-    console.log("createDeck: ", game.deck);
     shuffleDeck();
-    console.log("shuffleDeck: ", game.deck);
     dealCards();
-    console.log("dealCards: ", getPlayersRoles());
+    console.log(gameCondition());
 
     message.channel.send("Night falls. Everyone check your card and go to sleep.");
 
@@ -753,6 +749,7 @@ async function startGame(message) {
         console.log(err);
     } finally {
         let voteResult = await vote(message);
+        if (voteResult === "Game was terminated.") return;
 
         if (voteResult) {
             console.log("Someone got voted out.");
@@ -772,12 +769,16 @@ async function startGame(message) {
             }
         } else {
             console.log("No one got voted out.");
-            if (game.roles.Werewolf.inGame || game.roles.Minion.inGame) return message.channel.send(`No one got voted out. Evil team wins!`);
-            return message.channel.send(`No one got voted out. Village team wins!`);
+            if (game.roles.Werewolf.inGame || game.roles.Minion.inGame) {
+                message.channel.send(`No one got voted out. Evil team wins!`);
+            } else {
+                message.channel.send(`No one got voted out. Village team wins!`);
+            }
         }
     }
 
     game.on = false;
+    console.log("Game session has ended.");
 }
 
 function discussion(message) {
@@ -789,6 +790,7 @@ function discussion(message) {
 function vote(message) {
     return new Promise(async (resolve, reject) => {
         if (!game.on) {
+            console.log("Game was terminated by stop command.");
             resolve("Game was terminated.");
         } else {
             const msg = await message.channel.send(`Vote Time. Careful! You can only vote once! ${getPlayersString()}`);
@@ -895,16 +897,6 @@ function dealCards() {
         game.players[i].send(`You are ${card}. ${game.roles[card].description}\n${getRoleOrder()}`);
         game.roles[card].inGame += 1;
     }
-
-    // let card = "Drunk";
-    // game.players[0].role = card;
-    // game.roles[card].inGame += 1;
-    // game.players[0].send(`Your card is ${card}\n${game.roles[card].description}`);
-
-    // card = "Doppelganger";
-    // game.players[1].role = card;
-    // game.roles[card].inGame += 1;
-    // game.players[1].send(`Your card is ${card}\n${game.roles[card].description}`);
 }
 
 function resetInGameRoles() {
@@ -953,6 +945,16 @@ function getPlayersRoles() {
 function getRolesCount() {
     let roles = Object.values(game.roles);
     return roles.reduce((a, b) => a + b.count, 0);
+}
+
+function findPlayersWithRole(role) {
+    let players = game.players.filter((player) => player.role === role);
+    return players.map((player) => player.username);
+}
+
+function findOtherPlayersWithRole(role, player) {
+    let players = game.players.filter((p) => p.role === role && p.username !== player.username);
+    return players.map((player) => player.username);
 }
 
 function swapPlayerCards(p1, p2) {
