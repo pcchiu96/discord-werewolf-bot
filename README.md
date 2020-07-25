@@ -23,15 +23,15 @@ The full detail of each roles and complete game rule can be found in the officia
 
 # Commands
 
-⋅⋅* prefix werewolf - starts the game with welcome message in the message channel.
-⋅⋅* prefix join - adds user to the game.
-⋅⋅* prefix leave - removes user from the game.
-⋅⋅* prefix players - shows all the players that have joined the game.
-⋅⋅* prefix roles - shows a list of game roles that are selected.
-⋅⋅* prefix add - this adds game roles to game.
-⋅⋅⋅"prefix add werewolf" will add a werewolf card to the game.
-⋅⋅⋅"prefix add villager villager" will add two villager cards to the game.
-⋅⋅* prefix remove is exactly like add command but removes role cards from the game.
-⋅⋅* prefix stop - terminates the game and removes all joined players.
-⋅⋅* prefix again - play again with the same roles and players after a game has ended.
-⋅⋅* prefix skip - skips the discussion time.
+-   prefix werewolf - starts the game with welcome message in the message channel.
+-   prefix join - adds user to the game.
+-   prefix leave - removes user from the game.
+-   prefix players - shows all the players that have joined the game.
+-   prefix roles - shows a list of game roles that are selected.
+-   prefix add - this adds game roles to game.
+    "prefix add werewolf" will add a werewolf card to the game.
+    "prefix add villager villager" will add two villager cards to the game.
+-   prefix remove is exactly like add command but removes role cards from the game.
+-   prefix stop - terminates the game and removes all joined players.
+-   prefix again - play again with the same roles and players after a game has ended.
+-   prefix skip - skips the discussion time.
