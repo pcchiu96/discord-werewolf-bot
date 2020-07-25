@@ -6,7 +6,7 @@ let game = {
             count: 1,
             inGame: 0,
             description: "Survive and don't get voted out! If you're the only Werewolf in-play, you become the Lone Wolf and you get to check one of the centre cards.",
-            perform() {
+            perform: function () {
                 return werewolf();
             },
         },
@@ -15,7 +15,7 @@ let game = {
             count: 1,
             inGame: 0,
             description: "Assist the Werewolves to win. Werewolves don't know who you are.",
-            perform() {
+            perform: function () {
                 return minion();
             },
         },
@@ -23,7 +23,7 @@ let game = {
             count: 0,
             inGame: 0,
             description: "You get to know your who the other Mason player is. If you don't see anyone then it means the Mason card is in the centre.",
-            perform() {
+            perform: function () {
                 return mason();
             },
         },
@@ -31,7 +31,7 @@ let game = {
             count: 1,
             inGame: 0,
             description: "You may check one player's card or two of the centre cards.",
-            perform(player) {
+            perform: function (player) {
                 return seer(player);
             },
         },
@@ -39,7 +39,7 @@ let game = {
             count: 1,
             inGame: 0,
             description: "You may swap your card with one of the players and look at your new card. (You may do nothing)",
-            perform(player) {
+            perform: function (player) {
                 return robber(player);
             },
         },
@@ -47,7 +47,7 @@ let game = {
             count: 0,
             inGame: 0,
             description: "You may swap two players cards with each other without them knowing. (This action includes swapping yourself with another player)",
-            perform(player) {
+            perform: function (player) {
                 return troublemaker(player);
             },
         },
@@ -55,7 +55,7 @@ let game = {
             count: 0,
             inGame: 0,
             description: "You are so drunk that you must exchange your card with one of the centre cards without knowing the card.",
-            perform(player) {
+            perform: function (player) {
                 return drunk(player);
             },
         },
@@ -63,7 +63,7 @@ let game = {
             count: 0,
             inGame: 0,
             description: "You wake up just before everyone else and check your final card.",
-            perform() {
+            perform: function () {
                 return insomniac();
             },
         },
@@ -72,7 +72,7 @@ let game = {
             count: 0,
             inGame: 0,
             description: "When you get voted out, you can shoot a player and kill him/her.",
-            perform() {
+            perform: function () {
                 return hunter();
             },
         },
@@ -81,7 +81,7 @@ let game = {
             inGame: 0,
             description: "You get to look at a player's card and become that role for the rest of the game.",
             role: "",
-            perform() {
+            perform: function () {
                 return doppelganger();
             },
         },
@@ -113,51 +113,60 @@ let game = {
     on: false,
 };
 
+let noPermissionNotice = "Bot has no permission to send message to this channel.";
+
 module.exports = {
     name: "One Night Ultimate Werewolf",
     description: "One Night Ultimate Werewolf using discord bot",
-    async werewolf(message, args) {
+    werewolf: async function (message) {
         console.log(gameCondition());
-        if (game.players.length) return message.channel.send("A game is already in session.");
 
-        const welcomeMsg = await message.channel.send("Welcome to One Night Ultimate Werewolf. Press the controller icon to join or type 'squish join'.");
-        await welcomeMsg.react(game.emojis.join);
-        await welcomeMsg.react(game.emojis.start);
+        try {
+            if (game.players.length) return message.channel.send("A game is already in session.");
 
-        //collect "🎮" and "🟢" reactions from welcome message
-        const filter = (reaction, user) => [game.emojis.join, game.emojis.start].includes(reaction.emoji.name) && !user.bot;
-        //no max limit only time limit of 30 seconds
-        const options = { time: 60000, dispose: true };
-        const welcomeMsgCollector = welcomeMsg.createReactionCollector(filter, options);
-        game.collectors.push(welcomeMsgCollector);
+            const welcomeMsg = await message.channel.send("Welcome to One Night Ultimate Werewolf. Press the controller icon to join or type 'squish join'.");
+            await welcomeMsg.react(game.emojis.join);
+            await welcomeMsg.react(game.emojis.start);
 
-        //collect users that reacted with "🎮" and only the host can press "🟢" to start the game
-        welcomeMsgCollector.on("collect", (reaction, user) => {
-            if (reaction.emoji.name === game.emojis.join) {
-                if (game.players.findIndex((i) => i.id === user.id) === -1) {
-                    game.players.push(user);
-                    console.log(`${user.username} joined.`);
+            //collect "🎮" and "🟢" reactions from welcome message
+            const filter = (reaction, user) => [game.emojis.join, game.emojis.start].includes(reaction.emoji.name) && !user.bot;
+            //no max limit only time limit of 30 seconds
+            const options = { time: 60000, dispose: true };
+            const welcomeMsgCollector = welcomeMsg.createReactionCollector(filter, options);
+            game.collectors.push(welcomeMsgCollector);
+
+            //collect users that reacted with "🎮" and only the host can press "🟢" to start the game
+            welcomeMsgCollector.on("collect", (reaction, user) => {
+                if (reaction.emoji.name === game.emojis.join) {
+                    if (game.players.findIndex((i) => i.id === user.id) === -1) {
+                        game.players.push(user);
+                        console.log(`${user.username} joined.`);
+                    }
+                } else if (user.id === message.author.id) {
+                    welcomeMsgCollector.stop();
+                    console.log(`Start button pressed.`);
+                    console.log(`Joined players ${game.players.map((player) => player.username)}`);
+
+                    if (!game.players.length) return message.channel.send("Cannot start game without any players.");
+                    setRoles(message);
                 }
-            } else if (user.id === message.author.id) {
-                welcomeMsgCollector.stop();
-                console.log(`Start button pressed.`);
-                console.log(`Joined players ${game.players.map((player) => player.username)}`);
-                setRoles(message);
-            }
-        });
+            });
 
-        //remove users that un-reacted "🎮"
-        welcomeMsgCollector.on("remove", (reaction, user) => {
-            let userIndex = game.players.findIndex((i) => i.id === user.id);
-            if (userIndex !== -1) {
-                game.players.splice(userIndex, 1);
-                console.log(`${user.username} removed.`);
-            }
-        });
+            //remove users that un-reacted "🎮"
+            welcomeMsgCollector.on("remove", (reaction, user) => {
+                let userIndex = game.players.findIndex((i) => i.id === user.id);
+                if (userIndex !== -1) {
+                    game.players.splice(userIndex, 1);
+                    console.log(`${user.username} removed.`);
+                }
+            });
+        } catch (err) {
+            console.log(noPermissionNotice);
+        }
     },
 
-    join(message) {
-        if (game.on) return message.channel.send("Cannot join when game is in session.");
+    join: function (message) {
+        if (game.on) return message.channel.send("Cannot join when game is in session.").catch(() => console.log(noPermissionNotice));
 
         if (game.players.findIndex((i) => i.id === message.author.id) === -1) {
             game.players.push(message.author);
@@ -165,8 +174,8 @@ module.exports = {
         }
     },
 
-    leave(message) {
-        if (game.on) return message.channel.send("Cannot leave when game is in session.");
+    leave: function (message) {
+        if (game.on) return message.channel.send("Cannot leave when game is in session.").catch(() => console.log(noPermissionNotice));
 
         let userIndex = game.players.findIndex((i) => i.id === message.author.id);
         if (userIndex !== -1) {
@@ -175,12 +184,12 @@ module.exports = {
         }
     },
 
-    players(message) {
-        if (!game.players.length) return message.channel.send("No players.");
+    players: function (message) {
+        if (!game.players.length) return message.channel.send("No players.").catch(() => console.log(noPermissionNotice));
         message.channel.send(game.players);
     },
 
-    roles(message) {
+    roles: function (message) {
         let rolesString = "";
         let keys = Object.keys(game.roles);
 
@@ -193,11 +202,11 @@ module.exports = {
             }
         }
 
-        message.channel.send(rolesString);
+        message.channel.send(rolesString).catch(() => console.log(noPermissionNotice));
     },
 
-    add(message, args) {
-        if (game.on) return message.channel.send("Cannot change roles when game is in session.");
+    add: function (message, args) {
+        if (game.on) return message.channel.send("Cannot change roles when game is in session.").catch(() => console.log(noPermissionNotice));
 
         for (let i = 0; i < args.length; i++) {
             let roleName = args[i][0].toUpperCase() + args[i].slice(1).toLowerCase(); //converting to proper name
@@ -209,8 +218,8 @@ module.exports = {
         getBalanceNotice(message);
     },
 
-    remove(message, args) {
-        if (game.on) return message.channel.send("Cannot change roles when game is in session.");
+    remove: function (message, args) {
+        if (game.on) return message.channel.send("Cannot change roles when game is in session.").catch(() => console.log(noPermissionNotice));
 
         for (let i = 0; i < args.length; i++) {
             let roleName = args[i][0].toUpperCase() + args[i].slice(1).toLowerCase(); //converting to proper name
@@ -222,8 +231,8 @@ module.exports = {
         getBalanceNotice(message);
     },
 
-    stop(message) {
-        if (!game.on && !game.players.length) return message.channel.send("No game in session.");
+    stop: function (message) {
+        if (!game.on && !game.players.length) return message.channel.send("No game in session.").catch(() => console.log(noPermissionNotice));
 
         game.on = false;
         game.roles.Doppelganger.role = "";
@@ -252,9 +261,9 @@ module.exports = {
         console.log("Stop. Game terminated.");
     },
 
-    again(message) {
-        if (game.on && game.players.length) return message.channel.send("Game is in session.");
-        if (!game.on && !game.players.length) return message.channel.send("No previous players history.");
+    again: function (message) {
+        if (game.on && game.players.length) return message.channel.send("Game is in session.").catch(() => console.log(noPermissionNotice));
+        if (!game.on && !game.players.length) return message.channel.send("No previous players history.").catch(() => console.log(noPermissionNotice));
 
         game.on = false;
         game.roles.Doppelganger.role = "";
@@ -283,7 +292,7 @@ module.exports = {
         startGame(message);
     },
 
-    skip() {
+    skip: function () {
         game.timer.cancel();
     },
 };
@@ -712,24 +721,16 @@ async function startGame(message) {
     message.channel.send("Night falls. Everyone check your card and go to sleep.");
 
     if (game.roles.Doppelganger.inGame) {
-        try {
-            let action = await game.roles["Doppelganger"].perform();
-            console.log(action);
-        } catch (err) {
-            console.log(err);
-        }
+        let action = await game.roles["Doppelganger"].perform().catch((err) => console.log("Porlbme here"));
+        console.log(action);
     }
 
     for (let i = 0; i < game.order.length; i++) {
         let roleName = game.order[i];
         if (game.roles[roleName].inGame) {
             console.log(`${roleName}'s Turn.`);
-            try {
-                let action = await game.roles[roleName].perform();
-                console.log(action);
-            } catch (err) {
-                console.log(err);
-            }
+            let action = await game.roles[roleName].perform().catch((err) => console.log("proiej"));
+            console.log(action);
         }
     }
 
@@ -892,9 +893,9 @@ function dealCards() {
     for (let i = 0; i < game.players.length; i++) {
         let card = game.deck[i];
         game.players[i].role = card;
-        game.players[i].send(`You are ${card}. ${game.roles[card].description}\n${getRoleOrder()}`).catch((err) => {
-            console.log(`Failed to send message to ${game.players[i].username}`);
-        });
+        game.players[i]
+            .send(`You are ${card}. ${game.roles[card].description}\n${getRoleOrder()}`)
+            .catch(() => console.log(`Failed to send message to ${game.players[i].username}`));
         game.roles[card].inGame += 1;
     }
 }
