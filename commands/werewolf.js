@@ -180,10 +180,6 @@ module.exports = {
         message.channel.send(game.players);
     },
 
-    // deck(message) {
-    //     message.channel.send(game.deck);
-    // },
-
     roles(message) {
         let rolesString = "";
         let keys = Object.keys(game.roles);
@@ -262,8 +258,10 @@ module.exports = {
 
         game.on = false;
         game.roles.Doppelganger.role = "";
-        game.timer.cancel();
-        clearTimeout(game.timer);
+        if (game.timer) {
+            game.timer.cancel();
+            clearTimeout(game.timer);
+        }
 
         //clear all inGame roles to 0
         let entries = Object.keys(game.roles);
@@ -894,7 +892,9 @@ function dealCards() {
     for (let i = 0; i < game.players.length; i++) {
         let card = game.deck[i];
         game.players[i].role = card;
-        game.players[i].send(`You are ${card}. ${game.roles[card].description}\n${getRoleOrder()}`);
+        game.players[i].send(`You are ${card}. ${game.roles[card].description}\n${getRoleOrder()}`).catch((err) => {
+            console.log(`Failed to send message to ${game.players[i].username}`);
+        });
         game.roles[card].inGame += 1;
     }
 }
